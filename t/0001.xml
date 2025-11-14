@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<diff>
+  <add sel="/language">
+    <page id="1972092405" voice="no" title="Trade Config Exchanger" descr="Text for Trade Config Exchanger">
+      <t id="1">Trade Config Exchanger</t>
+      <t id="2">Trade Config Exchanger allows you to exchange the trade configuration from one station to another. It is useful when you want to have the same trade configuration for several stations.</t>
+      <t id="1001">Trade Configurations Exchange</t>
+      <t id="1002">{1972092405, 1001} from ...</t>
+      <t id="1101">From:</t>
+      <t id="1102">To:</t>
+    </page>
+  </add>
+</diff>

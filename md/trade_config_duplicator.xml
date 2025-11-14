@@ -1,0 +1,725 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="Trade_Config_Duplicator" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <cue name="Duplicate_Trade_Config" instantiate="true">
+    <conditions>
+        <event_cue_signalled cue="md.Interact_Menu_API.Get_Actions" />
+    </conditions>
+    <actions>
+        <set_value name="$StationTo" exact="event.param.$object"/>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Duplicate_Trade_Config:\n StationCurrent: %s.\n event.param: %s.'.[@$StationTo.debugname, @event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Duplicate_Trade_Config'" />
+        <include_actions ref="Menu_Param_Debug"/>
+        <!-- event.param.$showPlayerInteractions and  -->
+        <do_if value="$StationTo.owner == faction.player and $StationTo.isclass.{class.station} and $StationTo.storagemodules.count > 0 and not (@$StationTo.products.count > 0)">
+          <debug_text text="'MOD: Trade_Config_Duplicator - Duplicate_Trade_Config:\n station: %s\n build: %s\n isshipyard: %s\n iswharf: %s\n isequipmentdock:%s\n issupplyship:%s\n istradestation: %s\n products: %s, %s\n tradewares: %s, %s'.[@$StationTo.debugname, @$StationTo.build, @$StationTo.isshipyard, @$StationTo.iswharf, @$StationTo.isequipmentdock, @$StationTo.issupplyship, @$StationTo.istradestation, @$StationTo.products.count, @$StationTo.products.list, @$StationTo.tradewares.count, @$StationTo.tradewares.list]" context="false" filter="scripts"/>
+          <signal_cue_instantly
+              cue="md.Interact_Menu_API.Add_Action"
+              param = "table[
+              $id         = 'duplicate_trade_config_from',
+              $section    = 'main',
+              $text       = {1972092405, 1002},
+              $callback   = Trade_Config_Duplicator_Menu_Init,
+              ]"/>
+              <!--
+                  $icon       = 'order_follow',
+                  $mouseover_icon = 'order_follow',
+                  $mouseover  = '%s %s'.[Text.$Follow, $StationTo.name],
+                  -->
+        </do_if>
+    </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_Init" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <do_if value="global.$TradeConfigDuplicator? and typeof @global.$TradeConfigDuplicator == datatype.table" negate="true">
+          <set_value name="global.$TradeConfigDuplicator" exact="table[]"/>
+        </do_if>
+        <set_value name="global.$TradeConfigDuplicator.$StationTo" exact="event.param.$object"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_Init'" />
+        <include_actions ref="Menu_Param_Debug"/>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Init:\n StationCurrent: %s.'.[@global.$TradeConfigDuplicator.$StationTo.debugname]" context="false" filter="scripts"/>
+        <find_station name="$Stations" functional="true" space="player.galaxy" owner="faction.player" multiple="true"/>
+        <set_value name="$StationsIndex" exact="1" />
+        <do_if value="global.$TradeConfigDuplicator.$StationsDropDownList? and typeof @global.$TradeConfigDuplicator.$StationsDropDownList == datatype.list">
+          <clear_list list="global.$TradeConfigDuplicator.$StationsDropDownList"/>
+        </do_if>
+        <do_else>
+          <create_list name="global.$TradeConfigDuplicator.$StationsDropDownList" />
+        </do_else>
+        <do_for_each name="$Station" in="$Stations">
+          <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Init:\n station: %s\n storagemodules: %s\n products: %s, %s\n resources: %s, %s\n tradewares: %s, %s'.[@$Station.debugname, @$Station.storagemodules.count, @$Station.products.count, @$Station.products.list, @$Station.resources.count, @$Station.resources.list, @$Station.tradewares.count, @$Station.tradewares.list]" context="false" filter="scripts"/>
+          <do_if value="@$Station != @global.$TradeConfigDuplicator.$StationTo and @$Station.products.count == 0 and $Station.storagemodules.count gt 0 and not @$Station.isshipyard and not @$Station.iswharf and not @$Station.isequipmentdock">
+            <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Init:\n add station: %s'.[@$Station.debugname]" context="false" filter="scripts"/>
+            <append_to_list name="global.$TradeConfigDuplicator.$StationsDropDownList"
+              exact="table[
+                $text                 = '%s (%s)'.[@$Station.knownname, @$Station.idcode],
+                $icon                 = @$Station.icon,
+                $displayremoveoption  = false,
+                $id                   = @$Station.debugname,
+                $object               = @$Station,
+                ]"/>
+          </do_if>
+        </do_for_each>
+        <sort_list list="global.$TradeConfigDuplicator.$StationsDropDownList" sortbyvalue="loop.element.$text"/>
+        <do_if value="global.$TradeConfigDuplicator.$StationsDropDownList.count gt 0">
+          <set_value name="global.$TradeConfigDuplicator.$StationsIndex" exact="1" />
+        </do_if>
+        <do_else>
+          <set_value name="global.$TradeConfigDuplicator.$StationsIndex" exact="0" />
+        </do_else>
+        <set_value name="player.entity.$trade_config_duplicator_stations" exact="table[
+            $StationTo = table[
+              $object = @global.$TradeConfigDuplicator.$StationTo,
+            ],
+            $StationFrom = table[
+              $object = @global.$TradeConfigDuplicator.$StationsDropDownList.{@global.$TradeConfigDuplicator.$StationsIndex}.$object,
+            ],
+          ]" />
+        <signal_cue_instantly
+          cue="md.Test_Lua_Call.Test_Call"
+          param = "table[
+            $StationTo = table[
+              $object = @global.$TradeConfigDuplicator.$StationTo,
+            ],
+            $StationFrom = table[
+              $object = @global.$TradeConfigDuplicator.$StationsDropDownList.{@global.$TradeConfigDuplicator.$StationsIndex}.$object,
+            ],
+          ]"/>
+
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Init:\n StationsIndex: %s\n StationsDropDownList: %s'.[@global.$TradeConfigDuplicator.$StationsIndex, @global.$TradeConfigDuplicator.$StationsDropDownList]" context="false" filter="scripts"/>
+        <signal_cue_instantly cue="Trade_Config_Duplicator_Menu_TradeWares_Set"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_TradeWares_Set" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+        <check_value value="global.$TradeConfigDuplicator.$StationsDropDownList? and typeof @global.$TradeConfigDuplicator.$StationsDropDownList == datatype.list and @global.$TradeConfigDuplicator.$StationsDropDownList.count > 0"/>
+        <check_value value="global.$TradeConfigDuplicator.$StationTo? and @global.$TradeConfigDuplicator.$StationTo.isclass.{class.station}"/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_TradeWares_Set:\n StationsIndex: %s\n StationsDropDownList: %s'.[@global.$TradeConfigDuplicator.$StationsIndex, @global.$TradeConfigDuplicator.$StationsDropDownList]" context="false" filter="scripts"/>
+        <set_value name="$StationTo" exact="global.$TradeConfigDuplicator.$StationTo"/>
+        <set_value name="$StationFrom" exact="@global.$TradeConfigDuplicator.$StationsDropDownList.{@global.$TradeConfigDuplicator.$StationsIndex}.$object"/>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_TradeWares_Set:\n StationTo: %s.\n StationFrom: %s.'.[@$StationTo.debugname, @$StationFrom.debugname]" context="false" filter="scripts"/>
+        <do_if value="global.$TradeConfigDuplicator.$TradeWares?">
+          <clear_list list="global.$TradeConfigDuplicator.$TradeWares"/>
+        </do_if>
+        <do_else>
+          <create_list name="global.$TradeConfigDuplicator.$TradeWares"/>
+        </do_else>
+        <create_list name="global.$TradeConfigDuplicator.$TradeWares"/>
+        <create_list name="$TradeWaresIdsList"/>
+        <do_for_each name="$TradeWare" in="$StationFrom.tradewares.list">
+          <append_to_list name="$TradeWaresIdsList" exact="@$TradeWare.id"/>
+          <append_to_list name="global.$TradeConfigDuplicator.$TradeWares" exact="table[
+            $checked        = false,
+            $active         = true,
+            $id             = @$TradeWare.id,
+            $name           = @$TradeWare.name,
+            $from           = table[
+              $buyPrice       = $StationFrom.buyprice.{$TradeWare}.formatted.default,
+              $buyAmount      = '%s'.[$StationFrom.cargo.{$TradeWare}.target],
+              $buyRule        = 'buy',
+              $sellPrice      = $StationFrom.sellprice.{$TradeWare}.formatted.default,
+              $sellAmount     = '%s'.[0],
+              $sellRule       = 'sell',
+            ]
+          ]"/>
+        </do_for_each>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_TradeWares_Set:\n TradeWaresIdsList: %s'.[@$TradeWaresIdsList]" context="false" filter="scripts"/>
+        <do_for_each name="$TradeWare" in="$StationTo.tradewares.list">
+          <set_value name="$TradeWareIndex" exact="$TradeWaresIdsList.indexof.{@$TradeWare.id}"/>
+          <do_if value="@$TradeWareIndex gt 0">
+            <set_value name="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$to" exact="table[
+              $buyPrice       = $StationTo.buyprice.{$TradeWare}.formatted.default,
+              $buyAmount      = '%s'.[$StationTo.cargo.{$TradeWare}.target],
+              $buyRule        = 'buy',
+              $sellPrice      = $StationTo.sellprice.{$TradeWare}.formatted.default,
+              $sellAmount     = '%s'.[0],
+              $sellRule       = 'sell',
+            ]"/>
+          </do_if>
+          <do_else>
+            <append_to_list name="$TradeWaresIdsList" exact="@$TradeWare.id"/>
+            <append_to_list name="global.$TradeConfigDuplicator.$TradeWares" exact="table[
+              $checked      = false,
+              $active       = false,
+              $id           = @$TradeWare.id,
+              $name         = @$TradeWare.name,
+              $from         = table[
+                $buyPrice     = '--',
+                $buyAmount    = '--',
+                $buyRule      = '--',
+                $sellPrice    = '--',
+                $sellAmount   = '--',
+                $sellRule     = '--',
+              ],
+              $to = table[
+                $buyPrice     = $StationTo.buyprice.{$TradeWare}.formatted.default,
+                $buyAmount    = '%s'.[$StationTo.cargo.{$TradeWare}.target],
+                $buyRule      = 'buy',
+                $sellPrice    = $StationTo.sellprice.{$TradeWare}.formatted.default,
+                $sellAmount   = '%s'.[0],
+                $sellRule     = 'sell',
+              ]
+            ]"/>
+          </do_else>
+        </do_for_each>
+        <set_value name="$TradeWareIndex"  exact="1"/>
+        <do_while value="$TradeWareIndex le global.$TradeConfigDuplicator.$TradeWares.count">
+          <do_if value="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$to?" negate="true">
+            <set_value name="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$to" exact="table[
+              $buyPrice     = '--',
+              $buyAmount    = '--',
+              $buyRule      = '--',
+              $sellPrice    = '--',
+              $sellAmount   = '--',
+              $sellRule     = '--',
+            ]"/>
+          </do_if>
+          <set_value name="$TradeWareIndex" operation="add" exact="1"/>
+        </do_while>
+        <sort_list list="global.$TradeConfigDuplicator.$TradeWares" sortbyvalue="loop.element.$name"/>
+        <clear_list list="$TradeWaresIdsList" />
+        <remove_value name="$TradeWaresIdsList" />
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_TradeWares_Set:\n TradeWares: %s'.[@global.$TradeConfigDuplicator.$TradeWares]" context="false" filter="scripts"/>
+        <signal_cue_instantly cue="Trade_Config_Duplicator_Menu_Refresh"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_Refresh" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+        <check_value value="global.$TradeConfigDuplicator.$StationsDropDownList? and typeof @global.$TradeConfigDuplicator.$StationsDropDownList == datatype.list and @global.$TradeConfigDuplicator.$StationsDropDownList.count > 0"/>
+        <check_value value="global.$TradeConfigDuplicator.$StationTo? and @global.$TradeConfigDuplicator.$StationTo.isclass.{class.station}"/>
+        <check_value value="global.$TradeConfigDuplicator.$TradeWares? and typeof @global.$TradeConfigDuplicator.$TradeWares == datatype.list"/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Refresh:\n TradeWares: %s'.[@global.$TradeConfigDuplicator.$TradeWares]" context="false" filter="scripts"/>
+        <set_value name="$StationTo" exact="global.$TradeConfigDuplicator.$StationTo"/>
+        <set_value name="$StationsDropDownList" exact="global.$TradeConfigDuplicator.$StationsDropDownList"/>
+        <set_value name="$StationFrom" exact="@global.$TradeConfigDuplicator.$StationsDropDownList.{@global.$TradeConfigDuplicator.$StationsIndex}"/>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Refresh:\n StationTo: %s.\n StationFrom: %s. $StationsIndex: %s\n StationsDropDownList: %s'.[@$StationTo.debugname, @$StationFrom.debugname, @global.$TradeConfigDuplicator.$StationsIndex, @global.$TradeConfigDuplicator.$StationsDropDownList]" context="false" filter="scripts"/>
+        <set_value name="$WaresIndex" exact="1"/>
+        <set_value name="$ActiveExists" exact="false"/>
+        <do_while value="$WaresIndex le global.$TradeConfigDuplicator.$TradeWares.count and not @$ActiveExists">
+          <do_if value="global.$TradeConfigDuplicator.$TradeWares.{@$WaresIndex}.$active">
+            <set_value name="$ActiveExists" exact="true"/>
+          </do_if>
+          <set_value name="$WaresIndex" operation="add" exact="1"/>
+        </do_while>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Create_Menu"
+          param = "table[
+            $id                   = 'trade_config_duplicator_menu',
+            $columns              = 12,
+            $title                = {1972092405, 1001},
+            $width                = 960,
+            $height               = 600,
+            $echo                 = ['TradeConfigDuplicator'],
+            $onCloseElement       = Trade_Config_Duplicator_Menu_On_Close,
+            ]"/>
+          <!--
+            $onRowChanged    = Trade_Config_Duplicator_Menu_On_Row_Changed,
+            $onColChanged    = Trade_Config_Duplicator_Menu_On_Col_Changed,
+            $onSelectElement = Trade_Config_Duplicator_Menu_On_Select_Element,
+            -->
+        <signal_cue_instantly
+          cue="md.Simple_Menu_API.Add_Row"
+          param="table[
+            $id                   = 'duplicate_trade_config_from_to',
+            $echo                 = [@$StationTo.debugname],
+            $fixed                = true,
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 1,
+            $text                 = {1972092405, 1101},
+            $id                   = 'duplicate_trade_config_from_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Dropdown"
+          param = "table[
+            $col                  = 2,
+            $colSpan              = 5,
+            $options              = $StationsDropDownList,
+            $id                   = 'duplicate_trade_config_from_station',
+            $startOption          = 1,
+            $onDropDownConfirmed  = Trade_Config_Duplicator_From_DropDown_Confirmed,
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 7,
+            $text                 = {1972092405, 1102},
+            $id                   = 'duplicate_trade_config_to_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 8,
+            $colSpan              = 5,
+            $text                 = '%s (%s)'.[@$StationTo.knownname, @$StationTo.idcode],
+            $id                   = 'duplicate_trade_config_to_station_text',
+            ]"/>
+        <signal_cue_instantly cue="md.Simple_Menu_API.Add_Row" param="table[
+          $id                     = 'duplicate_trade_config_trade_ware_buttons',
+          $echo                   = ['RowButtons'],
+          $fixed                  = true,
+          ]"/>
+        <signal_cue_instantly cue="md.Simple_Menu_API.Make_Button" param="table[
+          $col                    = 9,
+          $colSpan                = 2,
+          $id                     = 'duplicate_trade_config_trade_ware_button_close',
+          $text                   = table[
+            $text       =  'Close',
+            $halign     = 'center',
+          ],
+          $onClick = Trade_Config_Duplicator_Menu_Close,
+          $onRightClick = Trade_Config_Duplicator_Menu_Close,
+          $echo = ['ButtonClose'],
+        ]"/>
+        <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Add_Row"
+            param = "table[
+              $id                 = 'duplicate_trade_config_header_one',
+              $fixed              = true,
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_CheckBox"
+          param = "table[
+            $col                  = 1,
+            $colSpan              = 1,
+            $scaling              = false,
+            $width                = 16,
+            $x                    = 32,
+            $id                   = 'duplicate_trade_config_select_all',
+            $checked              = @global.$TradeConfigDuplicator.$SelectAll,
+            $active               = $ActiveExists,
+            $echo                 = ['SelectAll'],
+            $onClick              = Trade_Config_Duplicator_CheckBox_Pressed,
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 2,
+            $colSpan              = 2,
+            $text                 = 'Ware',
+            $id                   = 'duplicate_trade_config_to_ware_name_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 4,
+            $colSpan              = 1,
+            $text                 = 'From:',
+            $id                   = 'duplicate_trade_config_to_ware_from_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 5,
+            $colSpan              = 1,
+            $text                 = 'Buy Price',
+            $id                   = 'duplicate_trade_config_to_ware_from_buy_price_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 6,
+            $colSpan              = 1,
+            $text                 = 'Buy Amount',
+            $id                   = 'duplicate_trade_config_to_ware_from_buy_amount_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 7,
+            $colSpan              = 2,
+            $text                 = 'Buy Rule',
+            $id                   = 'duplicate_trade_config_to_ware_from_buy_rule_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 9,
+            $colSpan              = 1,
+            $text                 = 'Sell Price',
+            $id                   = 'duplicate_trade_config_to_ware_from_sell_price_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 10,
+            $colSpan              = 1,
+            $text                 = 'Sell Amount',
+            $id                   = 'duplicate_trade_config_to_ware_from_sell_amount_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 11,
+            $colSpan              = 2,
+            $text                 = 'Sell Rule',
+            $id                   = 'duplicate_trade_config_to_ware_from_sell_rule_text',
+            ]"/>
+        <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Add_Row"
+            param = "table[
+              $id                   = 'duplicate_trade_config_header_one',
+              $fixed = true,
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 4,
+            $colSpan              = 1,
+            $text                 = 'To:',
+            $id                   = 'duplicate_trade_config_to_ware_to_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 5,
+            $colSpan              = 1,
+            $text                 = 'Buy Price',
+            $id                   = 'duplicate_trade_config_to_ware_to_buy_price_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 6,
+            $colSpan              = 1,
+            $text                 = 'Buy Amount',
+            $id                   = 'duplicate_trade_config_to_ware_to_buy_amount_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 7,
+            $colSpan              = 2,
+            $text                 = 'Buy Rule',
+            $id                   = 'duplicate_trade_config_to_ware_to_buy_rule_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 9,
+            $colSpan              = 1,
+            $text                 = 'Sell Price',
+            $id                   = 'duplicate_trade_config_to_ware_to_sell_price_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 10,
+            $colSpan              = 1,
+            $text                 = 'Sell Amount',
+            $id                   = 'duplicate_trade_config_to_ware_to_sell_amount_text',
+            ]"/>
+        <signal_cue_instantly
+          cue = "md.Simple_Menu_API.Make_Text"
+          param = "table[
+            $col                  = 11,
+            $colSpan              = 2,
+            $text                 = 'Sell Rule',
+            $id                   = 'duplicate_trade_config_to_ware_to_sell_rule_text',
+            ]"/>
+        <do_for_each name="$TradeWare" in="global.$TradeConfigDuplicator.$TradeWares">
+          <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Refresh:\n TradeWare: %s'.[@$TradeWare]" context="false" filter="scripts"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Add_Row"
+            param = "table[
+              $id                   = 'duplicate_trade_config_trade_ware_row_one_%s'.[@$TradeWare.$id],
+              $echo                 = ['RowOneTradeWare%s'.[@$TradeWare.$id]],
+              $fixed                = false,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_CheckBox"
+            param = "table[
+              $col                  = 1,
+              $colSpan              = 1,
+              $scaling              = false,
+              $width                = 16,
+            $x                    = 32,
+              $id                   = 'duplicate_trade_config_ware_select_%s'.[@$TradeWare.$id],
+              $checked              = @$TradeWare.$checked,
+              $active               = @$TradeWare.$active,
+              $echo                 = [@$TradeWare.$id],
+              $onClick              = Trade_Config_Duplicator_CheckBox_Pressed,
+              ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 2,
+              $colSpan              = 3,
+              $id                   = 'duplicate_trade_config_trade_ware_name_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$name,
+            ]"/>
+          <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Refresh:\n TradeWare.from: %s'.[@$TradeWare.$from]" context="false" filter="scripts"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 5,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_from_buy_price_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$buyPrice,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 6,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_from_buy_amount_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$buyAmount,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 7,
+              $colSpan              = 2,
+              $id                   = 'duplicate_trade_config_trade_ware_from_buy_rule_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$buyRule,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 9,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_from_sell_price_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$sellPrice,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 10,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_from_sell_amount_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$sellAmount,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 11,
+              $colSpan              = 2,
+              $id                   = 'duplicate_trade_config_trade_ware_from_sell_rule_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$from.$sellRule,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Add_Row"
+            param = "table[
+              $id                   = 'duplicate_trade_config_trade_ware_row_two_%s'.[@$TradeWare.$id],
+              $echo                 = ['RowTwoTradeWare%s'.[$TradeWare.$id]],
+              $fixed                = false,
+            ]"/>
+          <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Refresh:\n TradeWare.to: %s'.[@$TradeWare.$to]" context="false" filter="scripts"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 5,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_to_buy_price_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$buyPrice,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 6,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_to_buy_amount_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$buyAmount,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 7,
+              $colSpan              = 2,
+              $id                   = 'duplicate_trade_config_trade_ware_to_buy_rule_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$buyRule,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 9,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_to_sell_price_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$sellPrice,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 10,
+              $colSpan              = 1,
+              $halign               = 'right',
+              $id                   = 'duplicate_trade_config_trade_ware_to_sell_amount_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$sellAmount,
+            ]"/>
+          <signal_cue_instantly
+            cue = "md.Simple_Menu_API.Make_Text"
+            param = "table[
+              $col                  = 11,
+              $colSpan              = 2,
+              $id                   = 'duplicate_trade_config_trade_ware_to_sell_rule_%s'.[@$TradeWare.$id],
+              $text                 = @$TradeWare.$to.$sellRule,
+            ]"/>
+        </do_for_each>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_On_Close" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_On_Close:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_On_Close'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_On_Row_Changed" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_On_Row_Changed:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_On_Row_Changed'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_On_Col_Changed" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_On_Col_Changed:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_On_Col_Changed'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_On_Select_Element" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_On_Select_Element:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_On_Select_Element'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue>
+    <cue name="Trade_Config_Duplicator_Menu_Close" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_Menu_Close:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_Menu_Close'" />
+        <include_actions ref="Menu_Param_Debug"/>
+        <remove_value name="global.$TradeConfigDuplicator.$StationTo"/>
+        <remove_value name="global.$TradeConfigDuplicator.$StationsDropDownList"/>
+        <remove_value name="global.$TradeConfigDuplicator.$StationsIndex"/>
+        <remove_value name="global.$TradeConfigDuplicator"/>
+        <signal_cue_instantly cue="md.Simple_Menu_API.Close_Menu"/>
+      </actions>
+    </cue>
+    <!-- <cue name="Trade_Config_Duplicator_From_DropDown_Activated" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_From_DropDown_Activated:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_From_DropDown_Activated'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue> -->
+    <cue name="Trade_Config_Duplicator_From_DropDown_Confirmed" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_From_DropDown_Confirmed:\n StationsIndex: %s\n StationsDropDownList: %s'.[@global.$TradeConfigDuplicator.$StationsIndex, @global.$TradeConfigDuplicator.$StationsDropDownList]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_From_DropDown_Confirmed'" />
+        <include_actions ref="Menu_Param_Debug"/>
+        <do_if value="event.param.$option_index? and @event.param.$option_index gt 0">
+          <set_value name="global.$TradeConfigDuplicator.$StationsIndex" exact="event.param.$option_index"/>
+          <signal_cue_instantly cue="Trade_Config_Duplicator_Menu_TradeWares_Set"/>
+        </do_if>
+      </actions>
+    </cue>
+    <!-- <cue name="Trade_Config_Duplicator_From_DropDown_Removed" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_From_DropDown_Removed:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_From_DropDown_Removed'" />
+        <include_actions ref="Menu_Param_Debug"/>
+      </actions>
+    </cue> -->
+    <cue name="Trade_Config_Duplicator_CheckBox_Pressed" instantiate="true" namespace="this">
+      <conditions>
+        <event_cue_signalled/>
+      </conditions>
+      <actions>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_CheckBox_Pressed:\n event.param: %s.'.[@event.param]" context="false" filter="scripts"/>
+        <set_value name="$DebugItem" exact="'Trade_Config_Duplicator_CheckBox_Pressed'" />
+        <include_actions ref="Menu_Param_Debug"/>
+        <set_value name="$TradeWareId" exact="@event.param.$echo.{1}"/>
+        <do_if value="@$TradeWareId == 'SelectAll'">
+          <do_if value="@global.$TradeConfigDuplicator.$SelectAll">
+            <set_value name="global.$TradeConfigDuplicator.$SelectAll" exact="false"/>
+          </do_if>
+          <do_else>
+            <set_value name="global.$TradeConfigDuplicator.$SelectAll" exact="true"/>
+          </do_else>
+        </do_if>
+        <set_value name="$TradeWareProcessed" exact="false"/>
+        <set_value name="$TradeWareIndex" exact="1"/>
+        <debug_text text="'MOD: Trade_Config_Duplicator - Trade_Config_Duplicator_CheckBox_Pressed:\n TradeWareId: %s\n TradeWareProcessed: %s\n TradeWareIndex: %s \n $SelectAll: %s'.[@$TradeWareId, @$TradeWareProcessed, @$TradeWareIndex, @global.$TradeConfigDuplicator.$SelectAll]" context="false" filter="scripts"/>
+        <do_while value="$TradeWareIndex le global.$TradeConfigDuplicator.$TradeWares.count and not @$TradeWareProcessed">
+          <do_if value="@$TradeWareId == 'SelectAll'">
+            <set_value name="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$checked" exact="global.$TradeConfigDuplicator.$SelectAll"/>
+          </do_if>
+          <do_elseif value="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$id == @$TradeWareId">
+            <set_value name="global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$checked" exact="not global.$TradeConfigDuplicator.$TradeWares.{@$TradeWareIndex}.$checked"/>
+            <set_value name="$TradeWareProcessed" exact="true"/>
+          </do_elseif>
+          <set_value name="$TradeWareIndex" operation="add" exact="1"/>
+        </do_while>
+        <signal_cue_instantly cue="Trade_Config_Duplicator_Menu_Refresh"/>
+      </actions>
+    </cue>
+    <library name="Menu_Param_Debug">
+      <actions>
+        <set_value name="$DebugText" exact="'MOD: Trade_Config_Duplicator - %s:\n event.param:'.[$DebugItem]"/>
+        <do_if  value="event.param? and typeof @event.param == datatype.table">
+          <set_value name="$DebugText" operation="add" exact="' table:'" />
+          <do_for_each name="$paramI" in="@event.param.keys.list">
+            <set_value name="$DebugText" operation="add" exact="'\n event.param[%s]:'.[@$paramI]" />
+            <do_if value="event.param.{@$paramI}? and typeof @event.param.{@$paramI} == datatype.table">
+              <set_value name="$DebugText" operation="add" exact="' table:'" />
+              <do_for_each name="$paramJ" in="@event.param.{@$paramI}.keys.list">
+                <set_value name="$DebugText" operation="add" exact="'\n    event.param[%s][%s]: value: %s, type: %s, debugname: %s, class: %s.'.[@$paramI, @$paramJ, @event.param.{@$paramI}.{@$paramJ}, typeof @event.param.{@$paramI}.{@$paramJ}, @event.param.{@$paramI}.{@$paramJ}.debugname, @event.param.{@$paramI}.{@$paramJ}.class]"/>
+              </do_for_each>
+            </do_if>
+            <do_else>
+              <set_value name="$DebugText" operation="add" exact="'value: %s, type: %s, debugname: %s, class: %s.'.[@event.param.{@$paramI}, typeof @event.param.{@$paramI}, @event.param.{@$paramI}.debugname, @event.param.{@$paramI}.class]"/>
+            </do_else>
+          </do_for_each>
+        </do_if>
+        <do_else>
+          <set_value name="$DebugText" operation="add" exact="'value: %s, type: %s, debugname: %s, class: %s.'.[@event.param, typeof @event.param, @event.param.debugname, @event.param.class]"/>
+        </do_else>
+        <debug_text text="$DebugText" context="false" filter="scripts"/>
+      </actions>
+    </library>
+  </cues>
+</mdscript>

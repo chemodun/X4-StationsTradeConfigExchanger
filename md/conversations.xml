@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<diff>
+  <add sel="/mdscript/cues/cue[@name='DefaultComm']/actions/do_else/do_if[@value='not $npctemplate']/do_elseif[@value='event.object.controlpost == controlpost.manager and event.object.isplayerowned']/do_if[@value='@event.object.controlled']/assert[@value='event.object.controlled.isclass.container']" pos="after">
+    <include_actions ref="md.Stations_TradeConfigExchanger.StationManagerInteraction" />
+  </add>
+</diff>

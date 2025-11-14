@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="Stations_TradeConfigExchanger" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+
+    <cue name="Main" version="100">
+      <conditions>
+        <event_cue_signalled cue="md.Setup.Start" />
+      </conditions>
+      <actions>
+        <set_value name="$DebugChance" exact="0" />
+      </actions>
+      <cues>
+
+        <library name="StationManagerInteraction" version="100">
+          <actions>
+            <set_value name="$station" exact="@event.object.assignedcontrolled" />
+            <debug_text text="'STCE_StationManagerInteraction: Station: %s.'.[$station.debugname]" />
+            <do_if value="@$station.storagemodules.count gt 0 and @$station.products.count == 0">
+              <debug_text
+                text="'STCE_StationManagerInteraction: Station: %s is Trade Station. Adding the menu item.'.[$station.debugname]" />
+              <add_player_choice text="{1972092405, 1}" tooltip="{1972092405, 2}" position="bottom_left"
+                section="STCE_Open" comment="Select to open the window" selectable="true" />
+            </do_if>
+            <do_else>
+              <debug_text text="'STCE_StationManagerInteraction: Station: %s is not Trade Station.'.[$station.debugname]" />
+            </do_else>
+          </actions>
+        </library>
+
+        <cue name="StationManagerInteractionHandler" instantiate="true" version="100">
+          <conditions>
+            <check_any>
+              <event_conversation_started convprefix="STCE_" />
+              <event_conversation_next_section sectionprefix="STCE_" />
+              <event_conversation_returned_to_section sectionprefix="STCE_" />
+            </check_any>
+          </conditions>
+          <actions>
+            <set_value name="$station" exact="@event.object.assignedcontrolled" />
+            <debug_text text="'STCE_StationManagerInteraction: Menu Item is Pressed.'.[$station.debugname]" />
+            <open_menu menu="STCE_Menu" param="[0, 0, $station]" param2="null" />
+          </actions>
+        </cue>
+
+      </cues>
+    </cue>
+  </cues>
+</mdscript>

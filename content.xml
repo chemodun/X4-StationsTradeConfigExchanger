@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content
+  id=""
+  name="Stations Trade Config Exchanger"
+  author="Chem O`Dun"
+  version="100"
+  date="2024-12-31"
+  save="false"
+  description="Stations Trade Config Exchanger allows you to duplicate the trade configuration from the  an one station to the another one. It is useful when you want to have the same trade configuration for several stations."
+>
+</content>

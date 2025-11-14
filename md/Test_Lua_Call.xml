@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<mdscript name="Test_Lua_Call" version="1.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" >
+
+<!--
+  MD side of the time api.
+  This will mostly act as a wrapper on the lua functions, which have
+  access to the real time (as opposed to game time).
+-->
+<cues>
+  <!-- Register the main lua file. -->
+  <cue name="Load_Lua_Files" instantiate="true">
+    <conditions>
+      <event_ui_triggered screen="'Lua_Loader'" control="'Ready'" />
+    </conditions>
+    <actions>
+      <raise_lua_event name="'Lua_Loader.Load'"
+                       param="'extensions.trade_config_duplicator.lua_test_lua_call'"/>
+    </actions>
+  </cue>
+
+  <cue name="Test_Call" instantiate="true" namespace="this">
+    <conditions>
+      <event_cue_signalled/>
+    </conditions>
+    <actions>
+      <run_actions ref="Debug_Value">
+        <param name="DebugTitle" value="'Test_Lua_Call - Test_Call'"/>
+        <param name="DebugItem" value="'event.param'"/>
+        <param name="DebugValue" value="event.param"/>
+      </run_actions>
+      <raise_lua_event name="'Test_Lua_Call.Test_Call'" param="event.param.clone"/>
+    </actions>
+  </cue>
+
+  <cue name="Test_Call_Back_Capture" instantiate="true" namespace="this">
+    <conditions>
+      <event_ui_triggered screen="'Test_Lua_Call'"/>
+    </conditions>
+    <actions>
+      <run_actions ref="Debug_Value">
+        <param name="DebugTitle" value="'Test_Lua_Call - Test_Call_Back_Capture'"/>
+        <param name="DebugItem" value="'event.param3'"/>
+        <param name="DebugValue" value="event.param3"/>
+      </run_actions>
+    </actions>
+  </cue>
+  <library name="Debug_Value" purpose="run_actions">
+    <params>
+      <param name="DebugTitle" />
+      <param name="DebugItem" />
+      <param name="DebugValue" />
+    </params>
+    <actions>
+      <run_actions ref="Debug_Value_Expand" result="$DebugText">
+        <param name="DebugText" value="'%s: DebugValue:'.[$DebugTitle]" />
+        <param name="Identifier" value="$DebugItem" />
+        <param name="Value" value="$DebugValue" />
+        <param name="Prefix" value="''" />
+      </run_actions>
+      <debug_text text="$DebugText" context="false" filter="scripts"/>
+    </actions>
+  </library>
+  <library name="Debug_Value_Expand" purpose="run_actions">
+    <params>
+      <param name="DebugText" />
+      <param name="Identifier" />
+      <param name="Value"  />
+      <param name="Prefix" />
+    </params>
+    <actions>
+      <set_value name="$DebugText" exact="'\n%s%s'.[$Prefix, $Identifier]" operation="add"/>
+      <set_value name="$Prefix" exact="'  %s'.[$Prefix]" />
+      <do_if value="typeof @$Value == datatype.table">
+        <do_for_each name="$key" in="@$Value.keys.list">
+          <set_value name="$ValueNew" exact="@$Value.{$key}" />
+          <run_actions ref="Debug_Value_Expand" result="$DebugText">
+            <param name="DebugText" value="$DebugText" />
+            <param name="Identifier" value="$key" />
+            <param name="Value" value="@$Value.{$key}" />
+            <param name="Prefix" value="@$Prefix" />
+          </run_actions>
+        </do_for_each>
+      </do_if>
+      <do_elseif value="typeof @$Value == datatype.list">
+        <set_value name="$index" exact="1"/>
+        <do_while value="$index le @$Value.count">
+          <set_value name="$ValueNew" exact="@$Value.{$index}" />
+          <run_actions ref="Debug_Value_Expand" result="$DebugText">
+            <param name="DebugText" value="$DebugText" />
+            <param name="Identifier" value="$index" />
+            <param name="Value" value="@$Value.{$index}" />
+            <param name="Prefix" value="@$Prefix" />
+          </run_actions>
+          <set_value name="$index" operation="add" exact="1"/>
+        </do_while>
+      </do_elseif>
+      <do_else>
+        <set_value name="$DebugText" exact="': %s,   type: %s'.[ $Value, typeof $Value]" operation="add"/>
+        <do_if value="typeof @$Value == datatype.component">
+          <set_value name="$DebugText" operation="add" exact="', debugname: %s, class: %s.'.[@$Value.debugname, @$Value.class]"/>
+        </do_if>
+      </do_else>
+      <return value="$DebugText"/>
+    </actions>
+  </library>
+
+</cues>
+
+</mdscript>
