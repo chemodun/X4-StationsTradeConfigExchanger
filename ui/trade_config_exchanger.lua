@@ -1,832 +1,1017 @@
 local ffi = require("ffi")
----@cast ffi ffi
-
 local C = ffi.C
----@cast C C
 
-local menu = {
-    name = "STCE_Menu",
-    title = ReadText(1972092405, 1001)
+ffi.cdef[[
+  typedef uint64_t UniverseID;
+  typedef int32_t TradeRuleID;
+
+  const char* GetComponentName(UniverseID componentid);
+  const char* GetObjectIDCode(UniverseID objectid);
+
+  bool GetContainerWareIsBuyable(UniverseID containerid, const char* wareid);
+  bool GetContainerWareIsSellable(UniverseID containerid, const char* wareid);
+
+  int32_t GetContainerBuyLimit(UniverseID containerid, const char* wareid);
+  int32_t GetContainerSellLimit(UniverseID containerid, const char* wareid);
+
+  bool HasContainerBuyLimitOverride(UniverseID containerid, const char* wareid);
+  bool HasContainerSellLimitOverride(UniverseID containerid, const char* wareid);
+  bool HasContainerOwnTradeRule(UniverseID containerid, const char* ruletype, const char* wareid);
+
+  void ClearContainerBuyLimitOverride(UniverseID containerid, const char* wareid);
+  void ClearContainerSellLimitOverride(UniverseID containerid, const char* wareid);
+  void ClearContainerWarePriceOverride(UniverseID containerid, const char* wareid, bool isbuy);
+
+  void SetContainerBuyLimitOverride(UniverseID containerid, const char* wareid, int32_t amount);
+  void SetContainerSellLimitOverride(UniverseID containerid, const char* wareid, int32_t amount);
+  void SetContainerTradeRule(UniverseID containerid, TradeRuleID id, const char* ruletype, const char* wareid, bool value);
+  void SetContainerWareIsBuyable(UniverseID containerid, const char* wareid, bool allowed);
+  void SetContainerWareIsSellable(UniverseID containerid, const char* wareid, bool allowed);
+  void SetContainerWarePriceOverride(UniverseID containerid, const char* wareid, bool isbuy, int32_t price);
+
+  TradeRuleID GetContainerTradeRuleID(UniverseID containerid, const char* ruletype, const char* wareid);
+
+  void AddTradeWare(UniverseID containerid, const char* wareid);
+  void UpdateProductionTradeOffers(UniverseID containerid);
+]]
+
+local TradeConfigExchanger = {
+  args = {},
+  playerId = 0,
+  mapMenu = {},
+  validOrders = {
+    SingleBuy  = "",
+    SingleSell = "",
+  },
+  sourceId = 0,
+  targetIds = {},
 }
 
-local debug0 = true         -- to see the input and output of core functions of the menu
-local debug1 = true         -- for init (lua loading time)
-local debug2 = true         -- for detailed logging inside menu functions
-local debugW = false         -- for debugging values we want to see during table rows and widget events
-local debugWProps = false    -- to see x, y, width, and height properties of tables
-local debugCheat = false     -- to add a cheat window
+local labels = {
+  enabled = "Enabled",
+  disabled = "Disabled",
+  limit = "Limit: %s",
+  price = "Price: %s",
+  rule = "Rule: %s",
+  autoLimit = "Auto",
+  overrideTag = "Override",
+  cloneButton = "Clone",
+  cancelButton = "Cancel",
+  globalRule = "Global rule",
+}
 
-local debugSettings = false  -- for logging variables coming from md
-local debugColorMod = false  -- for background coloring of frame tables in option mode
 
-local debugGetData = false   -- for logging the status check of Player.entity.$md_RFM_DataChanged
-local debugData = false      -- for logging variables like Player.entity.$RM_Fleets, $FleetRecords, $RebuildCues
+TradeConfigExchanger.labels = labels
 
--- init menu and register witdh Helper
-local function Init()
-    Menus = Menus or {}
 
-    local founded = false
-    for _, imenu in ipairs(Menus) do -- note that i is simply a placeholder for an ignored variable
-        if imenu.name == menu.name then
-            founded = true
-            break
-        end
+local Lib = require("extensions.sn_mod_support_apis.ui.Library")
+
+local function debugTrace(message)
+  local text = "TradeConfigExchanger: " .. message
+  if type(DebugError) == "function" then
+    DebugError(text)
+  end
+end
+
+local function getPlayerId()
+  local current = C.GetPlayerID()
+  if current == nil or current == 0 then
+    return
+  end
+
+  local converted = ConvertStringTo64Bit(tostring(current))
+  if converted ~= 0 and converted ~= TradeConfigExchanger.playerId then
+    debugTrace("updating player_id to " .. tostring(converted))
+    TradeConfigExchanger.playerId = converted
+  end
+end
+
+local function toUniverseId(value)
+  if value == nil then
+    return 0
+  end
+
+  if type(value) == "number" then
+    return value
+  end
+
+  local idStr = tostring(value)
+  if idStr == "" or idStr == "0" then
+    return 0
+  end
+
+  return ConvertStringTo64Bit(idStr)
+end
+
+
+local function getStationName(shipId)
+  if shipId == 0 then
+    return "Unknown"
+  end
+  local name = GetComponentData(ConvertStringToLuaID(tostring(shipId)), "name")
+  local idCode = ffi.string(C.GetObjectIDCode(shipId))
+  return string.format("%s (%s)", name, idCode)
+end
+
+local function centerFrameVertically(frame)
+  frame.properties.height = frame:getUsedHeight() + Helper.borderSize
+  if (frame.properties.height > Helper.viewHeight ) then
+    frame.properties.y = Helper.borderSize
+    frame.properties.height = Helper.viewHeight - 2 * Helper.borderSize
+  else
+    frame.properties.y = (Helper.viewHeight - frame.properties.height) / 2
+  end
+end
+
+function TradeConfigExchanger.alertMessage(options)
+  local menu = TradeConfigExchanger.mapMenu
+  if type(menu) ~= "table" or type(menu.closeContextMenu) ~= "function" then
+    debugTrace("alertMessage: Invalid menu instance")
+    return false, "Map menu instance is not available"
+  end
+  if type(Helper) ~= "table" then
+    debugTrace("alertMessage: Helper UI utilities are not available")
+    return false, "Helper UI utilities are not available"
+  end
+
+  if type(options) ~= "table" then
+    return false, "Options parameter is not a table"
+  end
+
+  if options.title == nil then
+    return false, "Title option is required"
+  end
+
+  if options.message == nil then
+    return false, "Message option is required"
+  end
+
+  local width = options.width or Helper.scaleX(400)
+  local xoffset = options.xoffset or (Helper.viewWidth - width) / 2
+  local yoffset = options.yoffset or Helper.viewHeight / 2
+  local okLabel = options.okLabel or ReadText(1001, 14)
+
+  local title = options.title
+  local message = options.message
+
+  menu.closeContextMenu()
+
+  menu.contextMenuMode = "tce_alert"
+  menu.contextMenuData = {
+    mode = "tce_alert",
+    width = width,
+    xoffset = xoffset,
+    yoffset = yoffset,
+  }
+
+  local contextLayer = menu.contextFrameLayer or 2
+
+  menu.contextFrame = Helper.createFrameHandle(menu, {
+    x = xoffset - 2 * Helper.borderSize,
+    y = yoffset,
+    width = width + 2 * Helper.borderSize,
+    layer = contextLayer,
+    standardButtons = { close = true },
+    closeOnUnhandledClick = true,
+  })
+  local frame = menu.contextFrame
+  frame:setBackground("solid", { color = Color["frame_background_semitransparent"] })
+
+  local ftable = frame:addTable(5, { tabOrder = 1, x = Helper.borderSize, y = Helper.borderSize, width = width, reserveScrollBar = false, highlightMode = "off" })
+
+  local headerRow = ftable:addRow(false, { fixed = true })
+  headerRow[1]:setColSpan(5):createText(title, copyAndEnrichTable(Helper.headerRowCenteredProperties, { color = Color["text_warning"] }))
+
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+
+  local messageRow = ftable:addRow(false, { fixed = true })
+  messageRow[1]:setColSpan(5):createText(message, {
+    halign = "center",
+    wordwrap = true,
+    color = Color["text_normal"]
+  })
+
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+
+  local buttonRow = ftable:addRow(true, { fixed = true })
+  buttonRow[3]:createButton():setText(okLabel, { halign = "center" })
+  buttonRow[3].handlers.onClick = function ()
+    local shouldClose = true
+    if shouldClose then
+      menu.closeContextMenu("back")
     end
-    if not founded then
-        table.insert(Menus, menu)
-        local xdebug = debug1 and DebugError("Inserted " .. menu.name .. " in Menus")
-        if Helper then
-            Helper.registerMenu(menu)
-            local xdebug = debug1 and DebugError("Registered " .. menu.name .. " in Menus")
+  end
+  ftable:setSelectedCol(3)
+
+  centerFrameVertically(frame)
+
+  frame:display()
+
+  return true
+end
+
+function TradeConfigExchanger.showTargetAlert()
+  local options = {}
+  options.title = ReadText(1972092408, 10310)
+  options.message = ReadText(1972092408, 10311)
+  TradeConfigExchanger.alertMessage(options)
+end
+
+
+function TradeConfigExchanger.cloneOrdersConfirm()
+  local menu = TradeConfigExchanger.mapMenu
+  if type(menu) ~= "table" or type(menu.closeContextMenu) ~= "function" then
+    debugTrace("alertMessage: Invalid menu instance")
+    return false, "Map menu instance is not available"
+  end
+  if type(Helper) ~= "table" then
+    debugTrace("alertMessage: Helper UI utilities are not available")
+    return false, "Helper UI utilities are not available"
+  end
+
+  local sourceId = TradeConfigExchanger.sourceId
+  local targetIds = TradeConfigExchanger.targetIds
+
+  local sourceName = getStationName(sourceId)
+  local title = ReadText(1972092408, 10320)
+  local targetsTitle = ReadText(1972092408, 10322)
+
+  local width = Helper.scaleX(910)
+  local xoffset = (Helper.viewWidth - width) / 2
+  local yoffset = Helper.viewHeight / 2
+
+  menu.closeContextMenu()
+
+  menu.contextMenuMode = "tce_clone_confirm"
+  menu.contextMenuData = {
+    mode = "tce_clone_confirm",
+    width = width,
+    xoffset = xoffset,
+    yoffset = yoffset,
+  }
+
+  local contextLayer = menu.contextFrameLayer or 2
+
+  menu.contextFrame = Helper.createFrameHandle(menu, {
+    x = xoffset - 2 * Helper.borderSize,
+    y = yoffset,
+    width = width + 2 * Helper.borderSize,
+    layer = contextLayer,
+    standardButtons = { close = true },
+    closeOnUnhandledClick = true,
+  })
+  local frame = menu.contextFrame
+  frame:setBackground("solid", { color = Color["frame_background_semitransparent"] })
+
+  local ftable = frame:addTable(13, { tabOrder = 1, x = Helper.borderSize, y = Helper.borderSize, width = width, reserveScrollBar = false, highlightMode = "off" })
+
+  local headerRow = ftable:addRow(false, { fixed = true })
+  headerRow[1]:setColSpan(13):createText(title, Helper.titleTextProperties)
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+  local headerRow = ftable:addRow(false, { fixed = true })
+  headerRow[1]:createText(ReadText(1972092408, 10321), Helper.headerRow1Properties)
+  local sourceNameProperties = copyAndEnrichTable(Helper.headerRowCenteredProperties, {color = Color["text_player_current"]})
+  headerRow[2]:setColSpan(7):createText(sourceName, sourceNameProperties)
+  headerRow[9]:setColSpan(5):createText(targetsTitle, Helper.headerRowCenteredProperties)
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+
+
+  local headerRow = ftable:addRow(false, { fixed = true })
+  headerRow[1]:setColSpan(8):createText(ReadText(1001, 3225), Helper.headerRowCenteredProperties) -- Order Queue
+
+  local tableHeaderRow = ftable:addRow(false, { fixed = true })
+  tableHeaderRow[1]:createText(ReadText(1001, 7802), Helper.headerRow1Properties) -- Orders
+  tableHeaderRow[2]:setColSpan(2):createText(ReadText(1001, 45), Helper.headerRow1Properties) -- Ware
+  tableHeaderRow[4]:createText(ReadText(1001, 1202), Helper.headerRow1Properties) -- Amount
+  tableHeaderRow[5]:createText(ReadText(1001, 2808), Helper.headerRow1Properties) -- Price
+  tableHeaderRow[6]:setColSpan(3):createText(ReadText(1041, 10049), Helper.headerRow1Properties) -- Location
+  tableHeaderRow[9]:setColSpan(5):createText(ReadText(1001, 2809), Helper.headerRow1Properties) -- Name
+
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+
+  local orders = TradeConfigExchanger.getStandingOrders(sourceId)
+  local cargoCapacity = TradeConfigExchanger.getCargoCapacity(sourceId)
+  local lineCount = math.max(#orders, #targetIds)
+  local instance = "left"
+  menu.infoTableData[instance] = {}
+  menu.infoTableData[instance].orders = {}
+  for i = 1, lineCount do
+    local row = ftable:addRow(false)
+    if i <= #orders then
+      local order = orders[i]
+      menu.infoTableData[instance].orders[i] = {}
+      local orderparams = GetOrderParams(sourceId, order.idx)
+      menu.infoTableData[instance].orders[i].params = orderparams
+      row[1]:createText(TradeConfigExchanger.validOrders[order.order], {halign = "left"})
+      row[2]:setColSpan(2):createText(GetWareData(orderparams[1].value, "name"), {halign = "left"})
+      local amount = orderparams[5].value
+      if order.order == "SingleSell" then
+        amount = cargoCapacity - amount
+      end
+      local percentage = (cargoCapacity > 0) and (amount * 100 / cargoCapacity ) or 0
+      row[4]:createText(string.format("%.2f%%", percentage), {halign = "right"})
+      row[5]:createText(orderparams[7].value, {halign = "right"})
+      local locations = orderparams[4].value
+      if type(locations) == "table" and #locations >= 1 then
+        local locId = toUniverseId(locations[1])
+        local locName = GetComponentData(ConvertStringToLuaID(tostring(locId)), "name")
+        if (#locations > 1) then
+          locName = locName .. ", ..."
         end
+        row[6]:setColSpan(3):createText(locName )
+      else
+        row[6]:setColSpan(3):createText("-", {halign = "center"})
+      end
     else
-        local xdebug = debug1 and DebugError("" .. menu.name .. " founded in Menus, Passed Insert and Register Proccess")
+      row[1]:setColSpan(8):createText("", {halign = "left"})
     end
-    DebugError (menu.name .. " .lua file Init OK...")
-end
-
-function menu.cleanup()
-    local xdebug = debug0 and DebugError("cleanup")
-	menu.currentStationObject = 0
-end
-
-function menu.onShowMenu()
-    local xdebug = debug0 and DebugError("onShowMenu")
-    menu.cleanup()
-	if menu.param[3] then
-        menu.currentStationObject = ConvertStringTo64Bit(tostring(menu.param[3]))
-	end
-	local xdebug = debug0 and DebugError("Current Station: " .. menu.currentStationObject)
-	if menu.currentStationObject ~= 0 then
-        local width = 800;
-        local columnWidthCheckBox = 5
-        local columnWidthWare = 30
-        local columnWidthOneStation = 100
-        local columnWidthBuyPrice= math.floor(width * 12 / 100)
-        local columnWidthBuyAmount = math.floor(width * 12 / 100)
-        local columnWidthBuyRule = math.floor(width * 12 / 100)
-        local columnWidthSellPrice = math.floor(width * 12 / 100)
-        local columnWidthSellAmount = math.floor(width * 12 / 100)
-        local columnWidthSellRule = math.floor(width * 12 / 100)
-		menu.currentStation = menu.getStationData(menu.currentStationObject)
-        menu.stationsList = menu.getStationsTable()
-	end
-
-    Helper.closeInteractMenu()
-end
-
-local function tableCount(t)
-    local count = 0
-    for _ in pairs(t) do
-        count = count + 1
+    if i <= #targetIds then
+      local targetName = getStationName(targetIds[i])
+      row[9]:setColSpan(5):createText(tostring(targetName), {halign = "left", color = Color["text_player_current"]})
+    else
+      row[9]:setColSpan(5):createText("", {halign = "center"})
     end
-    return count
+  end
+
+  ftable:addEmptyRow(Helper.standardTextHeight / 2)
+
+  local buttonRow = ftable:addRow(true, { fixed = true })
+  buttonRow[10]:setColSpan(2):createButton():setText(ReadText(1001, 2821), { halign = "center" })
+  buttonRow[10].handlers.onClick = function ()
+    TradeConfigExchanger.cloneOrdersExecute()
+    menu.closeContextMenu("back")
+  end
+  buttonRow[12]:setColSpan(2):createButton():setText(ReadText(1001, 64), { halign = "center" })
+  buttonRow[12].handlers.onClick = function ()
+    TradeConfigExchanger.cloneOrdersCancel()
+    menu.closeContextMenu("back")
+  end
+  buttonRow[1]:setColSpan(2):createButton():setText(ReadText(1972092408, 10201), { halign = "center" })
+  buttonRow[1].handlers.onClick = function ()
+    TradeConfigExchanger.clearSource()
+    menu.closeContextMenu("back")
+  end
+
+  buttonRow[4]:setColSpan(2):createButton():setText('Add Location', { halign = "center" })
+  buttonRow[4].handlers.onClick = function ()
+    return TradeConfigExchanger.SetOrderParam(1, 4, 1, nil, instance)
+  end
+  ftable:setSelectedCol(12)
+
+  centerFrameVertically(frame)
+
+  frame:display()
 end
 
-function menu.getStationsTable()
-    local xdebug = debug2 and DebugError("getStationsTable")
-	local numOwnedStations = C.GetNumAllFactionStations("player")
-	local allOwnedStations = ffi.new("UniverseID[?]", numOwnedStations)
-    local stationsResult = {}
-	numOwnedStations = C.GetAllFactionStations(allOwnedStations, numOwnedStations, "player")
-	for i = 0, numOwnedStations - 1 do
-		local station = ConvertStringTo64Bit(tostring(allOwnedStations[i]))
-		local stationName, manager, shiptrader = GetComponentData(station, "name", "tradenpc", "shiptrader")
-        local stationIdCode = ffi.string(C.GetObjectIDCode(station))
-		stationName = stationName .. " (" .. stationIdCode .. ")"
-        local isWharf, isShipyard, isDefenceStation, isTradeStation = GetComponentData(station, "iswharf", "isshipyard", "isdefencestation", "istradestation")
-        local xdebug = debug2 and DebugError(string.format("Processing station: Name: %s, isWharf: %s, isShipyard: %s, isDefenceStation: %s, isTradeStation: %s",
-            stationName, tostring(isWharf), tostring(isShipyard), tostring(isDefenceStation), tostring(isTradeStation)))
-		if manager and not shiptrader and not isShipyard and not isWharf then
-            local products, tradeWares = GetComponentData(station, "products", "tradewares")
-            local productsCount = tableCount(products)
-            local tradeWaresCount = tableCount(tradeWares)
-            local containersTypesCount = C.GetNumCargoTransportTypes(station, true)
-            xdebug = debug2 and DebugError(string.format("Station: %s, Products Count: %s, tradeWares Count: %s, Container Types Count: %s", stationName, productsCount, tradeWaresCount, containersTypesCount))
-            if productsCount == 0  and containersTypesCount > 0 then
-                xdebug = debug2 and DebugError(string.format("Station: %s is Added", stationName))
-                table.insert(stationsResult, { object = station, name = stationName, idCode = stationIdCode, tradeWares = tradeWares })
-            end
-		end
-	end
-    return stationsResult
+
+local function computeProductionDetails(entry)
+  if entry.productionSignature then
+    return
+  end
+
+  local macros = {}
+  local modules = GetProductionModules(entry.id64) or {}
+  for _, module in ipairs(modules) do
+    local macro = GetComponentData(module, "macro")
+    if type(macro) == "string" and macro ~= "" then
+      table.insert(macros, macro)
+    end
+  end
+  table.sort(macros)
+  entry.productionMacros = macros
+  entry.productionSignature = table.concat(macros, "|")
+
+  local products = GetComponentData(entry.id, "products") or {}
+  table.sort(products)
+  entry.productionProducts = products
+  entry.productionProductNames = {}
+  for _, ware in ipairs(products) do
+    local name = GetWareData(ware, "name")
+    table.insert(entry.productionProductNames, name)
+  end
 end
 
-function menu.getStationData(stationObject)
-	local station = {}
+local function buildStationCache()
+  local stations = {}
+  local options = {}
+  local list = GetContainedStationsByOwner("player", nil, true) or {}
 
-	station.object = stationObject
-	station.id = ffi.string(C.GetObjectIDCode(stationObject))
-	station.name = ffi.string(C.GetComponentName(stationObject))
-	station.class = ffi.string(C.GetComponentClass(stationObject))
-	local xdebug = debug2 and DebugError(string.format("Station Id: %s, Name: %s, Class: %s", station.id, station.name, station.class))
-    station.macro, station.faction, station.sectorId = GetComponentData(stationObject, "macro", "owner", "sectorid" )
-    -- station.factionColor = GetFactionData(station.faction, "color")
-    -- station.sectorOwner = GetComponentData(station.sectorId, "owner")
-    -- station.sectorOwnerColor = GetFactionData(station.sectorOwner, "color")
-    -- station.isplayerowned, station.icon, station.isEnemy, station.isHostile, station.uiRelation = GetComponentData(stationObject, "isplayerowned", "icon", "isenemy", "ishostile", "uirelation")
-    station.isShipyard, station.isWharf = GetComponentData(station.object64, "isshipyard", "iswharf")
-	xdebug = debug2 and DebugError(string.format("Station Macro: %s, isShipyard: %s, isWharf: %s", station.macro, station.isShipyard, station.isWharf))
-    station.macroName = GetMacroData(station.macro, "name")
-	local rawTradeWares = GetComponentData(stationObject, "tradewares")
-    local tradeWares = {}
-    local storageInfoAmounts  = C.IsInfoUnlockedForPlayer(stationObject, "storage_amounts")
-	local storageInfoWareList = C.IsInfoUnlockedForPlayer(stationObject, "storage_warelist")
-	local storageInfoCapacity = C.IsInfoUnlockedForPlayer(stationObject, "storage_capacity")
-    for _, ware in ipairs(rawTradeWares) do
-        local name, transportType = GetWareData(ware, "name", "transport")
-        local cargo, isPlayerOwned = GetComponentData(stationObject, "cargo", "isplayerowned")
-        local productionLimit = GetWareProductionLimit(stationObject, ware)
-        local shownAmount = storageInfoAmounts and cargo[ware] or 0
-        local shownMax = storageInfoCapacity and math.max(shownAmount, productionLimit) or shownAmount
-        local buyLimit, sellLimit
-        if isPlayerOwned then
-            if C.HasContainerBuyLimitOverride(stationObject, ware) then
-                buyLimit = math.max(0, math.min(shownMax, C.GetContainerBuyLimit(stationObject, ware)))
-            end
-            if C.HasContainerSellLimitOverride(stationObject, ware) then
-                sellLimit = math.max(buyLimit or 0, math.min(shownMax, C.GetContainerSellLimit(stationObject, ware)))
-            end
+  for _, station in ipairs(list) do
+    local id = toIdString(station)
+    local id64 = toUniverseId(station)
+    if id and id64 and (id64 ~= 0) then
+      local entry = {
+        id = id,
+        id64 = id64,
+      }
+      entry.displayName = getStationName(entry)
+      computeProductionDetails(entry)
+      stations[id] = entry
+      table.insert(options, { id = id, text = entry.displayName })
+    end
+  end
+
+  table.sort(options, function(a, b)
+    return a.text < b.text
+  end)
+
+  return stations, options
+end
+
+local function ensureTradeRuleNames()
+  if TradeConfigExchanger.tradeRuleNames then
+    return
+  end
+  if type(Helper) ~= "table" then
+    return
+  end
+  if type(Helper.updateTradeRules) == "function" then
+    Helper.updateTradeRules()
+  end
+  local mapping = {}
+  if type(Helper.traderuleOptions) == "table" then
+    for _, option in ipairs(Helper.traderuleOptions) do
+      mapping[option.id] = option.text
+    end
+  end
+  TradeConfigExchanger.tradeRuleNames = mapping
+end
+
+local function formatTradeRuleLabel(id, hasOwn)
+  ensureTradeRuleNames()
+  if not hasOwn then
+    return labels.globalRule
+  end
+  if id == 0 then
+    id = -1
+  end
+  local label = TradeConfigExchanger.tradeRuleNames and TradeConfigExchanger.tradeRuleNames[id]
+  if not label or label == "" then
+    label = string.format("Rule %s", tostring(id))
+  end
+  return label
+end
+
+local function collectTradeData(entry, forceRefresh)
+  if entry.tradeData and not forceRefresh then
+    return entry.tradeData
+  end
+
+  local container = entry.id64
+  local tradewares = GetComponentData(entry.id, "tradewares") or {}
+  local map = {}
+  local set = {}
+
+  for _, ware in ipairs(tradewares) do
+    set[ware] = true
+    local name = GetWareData(ware, "name")
+
+    local buyAllowed = C.GetContainerWareIsBuyable(container, ware)
+    local buyLimit = C.GetContainerBuyLimit(container, ware)
+    local buyOverride = C.HasContainerBuyLimitOverride(container, ware)
+    local buyPrice = RoundTotalTradePrice(GetContainerWarePrice(container, ware, true))
+    local buyPriceOverride = HasContainerWarePriceOverride(container, ware, true)
+    local buyRuleId = C.GetContainerTradeRuleID(container, "buy", ware)
+    local buyOwnRule = C.HasContainerOwnTradeRule(container, "buy", ware)
+
+    local sellAllowed = C.GetContainerWareIsSellable(container, ware)
+    local sellLimit = C.GetContainerSellLimit(container, ware)
+    local sellOverride = C.HasContainerSellLimitOverride(container, ware)
+    local sellPrice = RoundTotalTradePrice(GetContainerWarePrice(container, ware, false))
+    local sellPriceOverride = HasContainerWarePriceOverride(container, ware, false)
+    local sellRuleId = C.GetContainerTradeRuleID(container, "sell", ware)
+    local sellOwnRule = C.HasContainerOwnTradeRule(container, "sell", ware)
+
+    map[ware] = {
+      ware = ware,
+      name = name,
+      buy = {
+        allowed = buyAllowed,
+        limit = buyLimit,
+        limitOverride = buyOverride,
+        price = buyPrice,
+        priceOverride = buyPriceOverride,
+        tradeRule = buyRuleId,
+        hasOwnRule = buyOwnRule,
+      },
+      sell = {
+        allowed = sellAllowed,
+        limit = sellLimit,
+        limitOverride = sellOverride,
+        price = sellPrice,
+        priceOverride = sellPriceOverride,
+        tradeRule = sellRuleId,
+        hasOwnRule = sellOwnRule,
+      }
+    }
+  end
+
+  entry.tradeData = {
+    map = map,
+    set = set,
+  }
+  return entry.tradeData
+end
+
+local function compareSide(source, target)
+  if not source and not target then
+    return true
+  end
+  if not source or not target then
+    return false
+  end
+  if source.allowed ~= target.allowed then
+    return false
+  end
+  if source.limitOverride ~= target.limitOverride then
+    return false
+  end
+  if source.limitOverride and (source.limit ~= target.limit) then
+    return false
+  end
+  if source.priceOverride ~= target.priceOverride then
+    return false
+  end
+  if source.priceOverride and (source.price ~= target.price) then
+    return false
+  end
+  if source.hasOwnRule ~= target.hasOwnRule then
+    return false
+  end
+  if source.hasOwnRule and (source.tradeRule ~= target.tradeRule) then
+    return false
+  end
+  return true
+end
+
+local function formatLimit(value, override)
+  if not override then
+    return labels.autoLimit
+  end
+  return string.format("%s (%s)", ConvertIntegerString(value, true, 3, true, true), labels.overrideTag)
+end
+
+local function formatPrice(value, override)
+  local amount = ConvertMoneyString(value, true, true, 2, true)
+  if override then
+    return string.format("%s (%s)", amount, labels.overrideTag)
+  end
+  return amount
+end
+
+local function formatSide(info)
+  if not info then
+    return "-"
+  end
+  local parts = {}
+  parts[#parts+1] = info.allowed and labels.enabled or labels.disabled
+  parts[#parts+1] = string.format(labels.limit, formatLimit(info.limit, info.limitOverride))
+  parts[#parts+1] = string.format(labels.price, formatPrice(info.price, info.priceOverride))
+  parts[#parts+1] = string.format(labels.rule, formatTradeRuleLabel(info.tradeRule, info.hasOwnRule))
+  return table.concat(parts, "\n")
+end
+
+local function hasSelection(data)
+  for _, value in pairs(data.cloneBuy or {}) do
+    if value then
+      return true
+    end
+  end
+  for _, value in pairs(data.cloneSell or {}) do
+    if value then
+      return true
+    end
+  end
+  return false
+end
+
+local function updateTargetOptions(data)
+  local options = {}
+  local total = 0
+  local matches = 0
+  local sourceEntry = data.selectedSource and data.stations[data.selectedSource]
+  local signature = sourceEntry and sourceEntry.productionSignature or nil
+
+  for id, entry in pairs(data.stations) do
+    if id ~= data.selectedSource then
+      total = total + 1
+      local qualifies = (not data.requireMatch) or (signature == nil) or (entry.productionSignature == signature)
+      if qualifies then
+        matches = matches + 1
+        options[#options+1] = { id = id, text = entry.displayName }
+      end
+    end
+  end
+
+  table.sort(options, function(a, b)
+    return a.text < b.text
+  end)
+
+  data.targetOptions = options
+  data.targetCounts = { matches = matches, total = total }
+
+  if data.selectedTarget then
+    local present = false
+    for _, option in ipairs(options) do
+      if option.id == data.selectedTarget then
+        present = true
+        break
+      end
+    end
+    if not present then
+      data.selectedTarget = nil
+      data.pendingResetSelections = true
+    end
+  end
+end
+
+local function resetSelections(data, wareList, diffs)
+  if not data.pendingResetSelections then
+    return
+  end
+  data.cloneBuy = {}
+  data.cloneSell = {}
+  for _, ware in ipairs(wareList) do
+    local diff = diffs[ware]
+    if diff then
+      data.cloneBuy[ware] = diff.buy
+      data.cloneSell[ware] = diff.sell
+    else
+      data.cloneBuy[ware] = false
+      data.cloneSell[ware] = false
+    end
+  end
+  data.pendingResetSelections = false
+end
+
+local function buildUnion(sourceData, targetData)
+  local union = {}
+  local list = {}
+  if sourceData then
+    for ware, info in pairs(sourceData.map) do
+      union[ware] = true
+      list[#list+1] = { ware = ware, name = info.name }
+    end
+  end
+  if targetData then
+    for ware, info in pairs(targetData.map) do
+      if not union[ware] then
+        union[ware] = true
+        list[#list+1] = { ware = ware, name = info.name }
+      end
+    end
+  end
+  table.sort(list, function(a, b)
+    return a.name < b.name
+  end)
+  return list
+end
+
+local function applyTradeRule(target, ware, sourceSide)
+  if sourceSide.hasOwnRule then
+    local id = sourceSide.tradeRule
+    if id == 0 then
+      id = -1
+    end
+    C.SetContainerTradeRule(target, id, sourceSide.isbuy and "buy" or "sell", ware, true)
+  else
+    C.SetContainerTradeRule(target, -1, sourceSide.isbuy and "buy" or "sell", ware, false)
+  end
+end
+
+local function cloneSide(target, ware, sourceSide)
+  if sourceSide.allowed ~= nil then
+    if sourceSide.isbuy then
+      C.SetContainerWareIsBuyable(target, ware, sourceSide.allowed)
+    else
+      C.SetContainerWareIsSellable(target, ware, sourceSide.allowed)
+    end
+  end
+
+  if sourceSide.limitOverride then
+    if sourceSide.isbuy then
+      C.SetContainerBuyLimitOverride(target, ware, sourceSide.limit)
+    else
+      C.SetContainerSellLimitOverride(target, ware, sourceSide.limit)
+    end
+  else
+    if sourceSide.isbuy then
+      C.ClearContainerBuyLimitOverride(target, ware)
+    else
+      C.ClearContainerSellLimitOverride(target, ware)
+    end
+  end
+
+  if sourceSide.priceOverride then
+    C.SetContainerWarePriceOverride(target, ware, sourceSide.isbuy, sourceSide.price)
+  else
+    C.ClearContainerWarePriceOverride(target, ware, sourceSide.isbuy)
+  end
+
+  applyTradeRule(target, ware, sourceSide)
+end
+
+local function sideFromInfo(info, isbuy)
+  if not info then
+    return nil
+  end
+  local copy = {}
+  for k, v in pairs(info) do
+    copy[k] = v
+  end
+  copy.isbuy = isbuy
+  return copy
+end
+
+local function applyClone(menu)
+  local data = menu.contextMenuData
+  if not data then
+    return
+  end
+  local sourceEntry = data.selectedSource and data.stations[data.selectedSource]
+  local targetEntry = data.selectedTarget and data.stations[data.selectedTarget]
+  if not sourceEntry or not targetEntry then
+    data.statusMessage = "Select source and target stations first."
+    data.statusColor = Color and Color["text_warning"] or nil
+    TradeConfigExchanger.render()
+    return
+  end
+
+  local sourceData = collectTradeData(sourceEntry)
+  local targetData = collectTradeData(targetEntry)
+  local wareList = buildUnion(sourceData, targetData)
+
+  local changes = 0
+  for _, ware in ipairs(wareList) do
+    local cloneBuy = data.cloneBuy and data.cloneBuy[ware]
+    local cloneSell = data.cloneSell and data.cloneSell[ware]
+    if cloneBuy or cloneSell then
+      local sourceInfo = sourceData.map[ware]
+      if sourceInfo then
+        if not targetData.set[ware] then
+          C.AddTradeWare(targetEntry.id64, ware)
+          targetData.set[ware] = true
         end
-        local item = {}
-        item.ware = ware
-        item.amount = shownAmount
-        item.name = name
-        item.transportType = transportType
-        item.buyLimit = buyLimit
-        item.sellLimit = sellLimit
-		xdebug = debug2 and DebugError(string.format("Ware: %s, Amount: %s, Name: %s, TransportType: %s, BuyLimit: %s, SellLimit: %s", item.ware, item.amount, item.name, item.transportType, item.buyLimit, item.sellLimit))
-        table.insert(tradeWares, item)
+        if cloneBuy then
+          cloneSide(targetEntry.id64, ware, sideFromInfo(sourceInfo.buy, true))
+          changes = changes + 1
+        end
+        if cloneSell then
+          cloneSide(targetEntry.id64, ware, sideFromInfo(sourceInfo.sell, false))
+          changes = changes + 1
+        end
+      end
     end
-    station.tradewares = tradeWares
-	return station
+  end
+
+  if changes > 0 then
+    C.UpdateProductionTradeOffers(targetEntry.id64)
+    collectTradeData(targetEntry, true)
+    collectTradeData(sourceEntry, true)
+    data.statusMessage = string.format("Applied %d setting(s).", changes)
+    data.statusColor = Color and Color["text_normal"] or nil
+    data.pendingResetSelections = true
+  else
+    data.statusMessage = "No settings selected to clone."
+    data.statusColor = Color and Color["text_warning"] or nil
+  end
+
+  TradeConfigExchanger.render()
 end
 
--- function menu.createTradeContext(frame)
--- 	menu.skipTradeRowChange = true
+function TradeConfigExchanger.render()
+  local menu = TradeConfigExchanger.mapMenu
+  if type(menu) ~= "table" or type(Helper) ~= "table" then
+    debugTrace("TradeConfigExchanger: Render: Invalid menu instance or Helper UI utilities are not available")
+    return
+  end
+  local data = menu.contextMenuData
+  if not data or data.mode ~= "trade_clone_exchanger" then
+    return
+  end
 
--- 	local convertedTradeOfferContainer = ConvertStringTo64Bit(tostring(menu.contextMenuData.component))
--- 	local isplayertradeoffercontainer = GetComponentData(convertedTradeOfferContainer, "isplayerowned")
+  Helper.removeAllWidgetScripts(menu, data.layer)
 
--- 	AddUITriggeredEvent(menu.name, "trade_context", ConvertStringToLuaID(convertedTradeOfferContainer))
+  local frame = Helper.createFrameHandle(menu, {
+    x = data.xoffset,
+    y = data.yoffset,
+    width = data.width,
+    layer = data.layer,
+    standardButtons = { close = true },
+    closeOnUnhandledClick = true,
+  })
+  frame:setBackground("solid", { color = Color and Color["frame_background_semitransparent"] or nil })
 
--- 	menu.updateTradeCost()
--- 	local convertedCurrentShip = ConvertStringTo64Bit(tostring(menu.contextMenuData.currentShip))
+  local columns = 7
+  local tableHandle = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = true, highlightMode = "off" })
+  tableHandle:setColWidthPercent(1, 18)
+  tableHandle:setColWidthPercent(2, 17)
+  tableHandle:setColWidthPercent(3, 17)
+  tableHandle:setColWidthPercent(4, 7)
+  tableHandle:setColWidthPercent(5, 17)
+  tableHandle:setColWidthPercent(6, 17)
+  tableHandle:setColWidthPercent(7, 7)
 
--- 	-- menu setup
--- 	local width = menu.contextMenuData.width
--- 	local amountcolumnwidth = 100
--- 	local pricecolumnwidth = 100
+  local row = tableHandle:addRow(false, { fixed = true })
+  row[1]:setColSpan(columns):createText(data.title or "Clone Station Trade Settings", Helper.headerRowCenteredProperties)
 
--- 	local columnwidth_ware   -- calculated below
--- 	local columnwidth_price			= =
--- 	local columnwidth_shipstorage	= math.floor(width * 12 / 100)
--- 	local columnwidth_sliderleft	= math.floor(width * 15 / 100)
--- 	local columnwidth_sliderright	= math.floor(width * 15 / 100)
--- 	local columnwidth_selloffer		= math.floor(width * 12 / 100)
--- 	local columnwidth_buyoffer		= math.floor(width * 12 / 100)
--- 	local columnwidth_reservation	= Helper.scaleY(config.mapRowHeight)
--- 	if menu.contextMenuData.wareexchange then
--- 		-- nearly symmetrical menu layout in ware exchange case:
--- 		--   price column = only a dummy in this case, always included in colspan.
--- 		--   selloffer column = other ship storage
--- 		--   buyoffer column = unused (almost same width as ware column)
--- 		columnwidth_price = 1
--- 		local remainingwidth = width - 6 * Helper.borderSize
--- 			- columnwidth_price
--- 			- columnwidth_shipstorage
--- 			- columnwidth_sliderleft
--- 			- columnwidth_sliderright
--- 			- columnwidth_selloffer
--- 		-- nearly symmetrical menu layout:
--- 		columnwidth_ware = math.ceil(remainingwidth / 2)
--- 		columnwidth_buyoffer = remainingwidth - columnwidth_ware
--- 	else
--- 		-- regular trade case
--- 		columnwidth_ware = width - 6 * Helper.borderSize
--- 			- columnwidth_price
--- 			- columnwidth_shipstorage
--- 			- columnwidth_sliderleft
--- 			- columnwidth_sliderright
--- 			- columnwidth_selloffer
--- 			- columnwidth_buyoffer
--- 	end
+  if data.statusMessage then
+    local statusRow = tableHandle:addRow(false, { fixed = true })
+    statusRow[1]:setColSpan(columns):createText(data.statusMessage, { wordwrap = true, color = data.statusColor })
+  end
 
--- 	-- ship
--- 	local shiptable = frame:addTable(9, { tabOrder = 2, maxVisibleHeight = menu.tradeContext.shipheight, x = Helper.borderSize, y = Helper.borderSize, width = menu.contextMenuData.width, reserveScrollBar = false })
--- 	shiptable:setColWidth(1, columnwidth_ware, false)
--- 	shiptable:setColWidth(2, columnwidth_price, false)
--- 	shiptable:setColWidth(3, columnwidth_shipstorage, false)
--- 	shiptable:setColWidth(4, columnwidth_sliderleft, false)
--- 	shiptable:setColWidth(5, columnwidth_sliderright, false)
--- 	shiptable:setColWidth(6, columnwidth_reservation, false)
--- 	shiptable:setColWidth(7, columnwidth_selloffer - columnwidth_reservation - Helper.borderSize, false)
--- 	shiptable:setColWidth(8, columnwidth_reservation, false)
--- 	shiptable:setColWidth(9, columnwidth_buyoffer - columnwidth_reservation - Helper.borderSize, false)
--- 	shiptable:setDefaultBackgroundColSpan(1, 9)
+  row = tableHandle:addRow(false, { fixed = true })
+  row[1]:setColSpan(2):createText("Source station")
+  row[3]:setColSpan(4):createDropDown(data.sourceOptions, {
+    startOption = data.selectedSource,
+    active = #data.sourceOptions > 0,
+    textOverride = (#data.sourceOptions == 0) and "No player stations" or nil,
+  })
+  row[3].handlers.onDropDownConfirmed = function(_, id)
+    data.selectedSource = id
+    data.pendingResetSelections = true
+    updateTargetOptions(data)
+    data.statusMessage = nil
+    TradeConfigExchanger.render()
+  end
 
--- 	local shipOptions = {}
--- 	local curShipOption = tostring(convertedCurrentShip)
+  row = tableHandle:addRow(true, { fixed = true })
+  row[1]:setColSpan(2):createText("Match production modules")
+  row[3]:createCheckBox(data.requireMatch ~= false, { height = Helper.standardButtonHeight, active = data.selectedSource ~= nil })
+  row[3].handlers.onClick = function(_, checked)
+    data.requireMatch = checked
+    updateTargetOptions(data)
+    data.pendingResetSelections = true
+    TradeConfigExchanger.render()
+  end
 
--- 	local sortedShips = {}
--- 	local found = false
--- 	for _, ship in ipairs(menu.contextMenuData.ships) do
--- 		local shipid = ConvertIDTo64Bit(ship.shipid)
--- 		if shipid == convertedCurrentShip then
--- 			found = true
--- 		end
+  row = tableHandle:addRow(false, { fixed = true })
+  row[1]:setColSpan(2):createText("Target station")
+  row[3]:setColSpan(4):createDropDown(data.targetOptions, {
+    startOption = data.selectedTarget,
+    active = #data.targetOptions > 0,
+    textOverride = (#data.targetOptions == 0) and "No matching stations" or nil,
+  })
+  row[3].handlers.onDropDownConfirmed = function(_, id)
+    data.selectedTarget = id
+    data.pendingResetSelections = true
+    data.statusMessage = nil
+    TradeConfigExchanger.render()
+  end
 
--- 		local class = ffi.string(C.GetComponentClass(ConvertStringTo64Bit(tostring(ship.shipid))))
--- 		local icon, primarypurpose = GetComponentData(ship.shipid, "icon", "primarypurpose")
--- 		local i = menu.findEntryByShipIcon(sortedShips, icon)
--- 		if i then
--- 			table.insert(sortedShips[i].ships, { shipid = shipid, name = ship.name })
--- 		else
--- 			table.insert(sortedShips, { icon = icon, class = class, purpose = primarypurpose, ships = { { shipid = shipid, name = ship.name } } })
--- 		end
--- 	end
--- 	if (not found) and (menu.contextMenuData.currentShip ~= 0) then
--- 		local ship = { shipid = convertedCurrentShip, name = ffi.string(C.GetComponentName(menu.contextMenuData.currentShip)) }
+  if data.targetCounts then
+    local infoRow = tableHandle:addRow(false, { fixed = true })
+    local text
+    if data.targetCounts.total == 0 then
+      text = "No other player stations available."
+    else
+      text = string.format("%d matching station(s) out of %d.", data.targetCounts.matches, data.targetCounts.total)
+    end
+    infoRow[1]:setColSpan(columns):createText(text, { color = (data.targetCounts.matches > 0) and nil or (Color and Color["text_warning"]) })
+  end
 
--- 		local class = ffi.string(C.GetComponentClass(menu.contextMenuData.currentShip))
--- 		local icon, primarypurpose = GetComponentData(ship.shipid, "icon", "primarypurpose")
--- 		local i = menu.findEntryByShipIcon(sortedShips, icon)
--- 		if i then
--- 			table.insert(sortedShips[i].ships, ship)
--- 		else
--- 			table.insert(sortedShips, { icon = icon, class = class, purpose = primarypurpose, ships = { ship } })
--- 		end
--- 	end
--- 	table.sort(sortedShips, menu.sortShipsByClassAndPurposeReverse)
+  local sourceEntry = data.selectedSource and data.stations[data.selectedSource]
+  local targetEntry = data.selectedTarget and data.stations[data.selectedTarget]
+  if sourceEntry then
+    local sourceRow = tableHandle:addRow(false, { fixed = true })
+    local summary = #sourceEntry.productionProductNames > 0 and table.concat(sourceEntry.productionProductNames, ", ") or "No production modules"
+    sourceRow[1]:setColSpan(columns):createText(string.format("Source produces: %s", summary), { wordwrap = true })
+  end
+  if targetEntry then
+    local targetRow = tableHandle:addRow(false, { fixed = true })
+    local summary = #targetEntry.productionProductNames > 0 and table.concat(targetEntry.productionProductNames, ", ") or "No production modules"
+    targetRow[1]:setColSpan(columns):createText(string.format("Target produces: %s", summary), { wordwrap = true })
+  end
 
--- 	local dropdownwidth = columnwidth_ware + columnwidth_price + columnwidth_shipstorage + columnwidth_sliderleft + 3 * Helper.borderSize - Helper.scaleY(Helper.headerRow1Height) - 4 * 2 - Helper.standardTextOffsetx
--- 	for _, data in ipairs(sortedShips) do
--- 		table.sort(data.ships, Helper.sortName)
--- 		for _, ship in ipairs(data.ships) do
--- 			local name = "\27[" .. data.icon .. "] " .. ship.name
--- 			local idcode = " (" .. ffi.string(C.GetObjectIDCode(ship.shipid)) .. ")"
--- 			local sectorname = GetComponentData(ship.shipid, "sector")
+  tableHandle:addEmptyRow(Helper.standardTextHeight / 2)
 
--- 			local fontsize = Helper.scaleFont(Helper.headerRow1Font, Helper.headerRow1FontSize)
--- 			local namewidth = math.ceil(C.GetTextWidth(name, Helper.headerRow1Font, fontsize))
--- 			local idcodewidth = math.ceil(C.GetTextWidth(idcode, Helper.headerRow1Font, fontsize))
--- 			local sectornamewidth = math.ceil(C.GetTextWidth("  " .. sectorname, Helper.standardFont, Helper.scaleFont(Helper.standardFont, Helper.headerRow1FontSize)))
--- 			if namewidth + idcodewidth + sectornamewidth > dropdownwidth then
--- 				name = TruncateText(name, Helper.headerRow1Font, fontsize, dropdownwidth - sectornamewidth - idcodewidth)
--- 			end
+  row = tableHandle:addRow(false, { fixed = true, bgColor = Color and Color["row_background_blue"] or nil })
+  row[1]:createText("Ware", Helper.headerRowCenteredProperties)
+  row[2]:createText("Source Buy", Helper.headerRowCenteredProperties)
+  row[3]:createText("Target Buy", Helper.headerRowCenteredProperties)
+  row[4]:createText("Copy", Helper.headerRowCenteredProperties)
+  row[5]:createText("Source Sell", Helper.headerRowCenteredProperties)
+  row[6]:createText("Target Sell", Helper.headerRowCenteredProperties)
+  row[7]:createText("Copy", Helper.headerRowCenteredProperties)
 
--- 			table.insert(shipOptions, { id = tostring(ship.shipid), text = name .. idcode, text2 = sectorname, icon = "", displayremoveoption = false })
--- 		end
--- 	end
+  local diffs = {}
+  local wareList = {}
 
--- 	local iscapship = IsComponentClass(convertedCurrentShip, "ship_l") or IsComponentClass(convertedCurrentShip, "ship_xl")
--- 	local ispartnersmallship = IsComponentClass(convertedTradeOfferContainer, "ship_m") or IsComponentClass(convertedTradeOfferContainer, "ship_s")
--- 	local missingdrones = true
--- 	if iscapship and (not ispartnersmallship) then
--- 		local shipunits = GetUnitStorageData(convertedCurrentShip, "transport")
--- 		local stationunits = GetUnitStorageData(convertedTradeOfferContainer, "transport")
--- 		for _, unit in ipairs(shipunits) do
--- 			if unit.amount > 0 then
--- 				missingdrones = false
--- 				break
--- 			end
--- 		end
--- 		if missingdrones then
--- 			for _, unit in ipairs(stationunits) do
--- 				if unit.amount > 0 then
--- 					missingdrones = false
--- 					break
--- 				end
--- 			end
--- 		end
--- 	else
--- 		missingdrones = false
--- 	end
--- 	local candock = true
--- 	if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 		if (not menu.contextMenuData.wareexchange) or IsComponentClass(convertedTradeOfferContainer, "station") then
--- 			candock = IsDockingPossible(convertedCurrentShip, convertedTradeOfferContainer, nil, true)
--- 		end
--- 	end
--- 	local isplayertraderestricted = isplayertradeoffercontainer and C.IsContainerTradingWithFactionRescricted(menu.contextMenuData.component, "player")
+  if sourceEntry and targetEntry then
+    local sourceData = collectTradeData(sourceEntry)
+    local targetData = collectTradeData(targetEntry)
+    wareList = buildUnion(sourceData, targetData)
 
--- 	local shipsectorname, blacklistgroup, name = "", "civilian", ""
--- 	if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 		local loc_shipsectorname, loc_blacklistgroup, loc_name, loc_icon = GetComponentData(convertedCurrentShip, "sector", "blacklistgroup", "name", "icon")
--- 		shipsectorname = loc_shipsectorname
--- 		blacklistgroup = loc_blacklistgroup
--- 		name = "\27[" .. loc_icon .. "] " .. loc_name .. " (" .. ffi.string(C.GetObjectIDCode(convertedCurrentShip)) .. ")"
--- 	end
--- 	local stationsector = ConvertIDTo64Bit(GetComponentData(convertedTradeOfferContainer, "sectorid"))
+    for _, ware in ipairs(wareList) do
+      local sourceInfo = sourceData.map[ware]
+      local targetInfo = targetData.map[ware]
+      local diffBuy = not compareSide(sourceInfo and sourceInfo.buy, targetInfo and targetInfo.buy)
+      local diffSell = not compareSide(sourceInfo and sourceInfo.sell, targetInfo and targetInfo.sell)
+      diffs[ware] = { buy = diffBuy, sell = diffSell }
 
--- 	-- title
--- 	local row = shiptable:addRow(true, { fixed = true, bgColor = Color["row_title_background"] })
--- 	row[1]:setBackgroundColSpan(4):setColSpan(4):createDropDown(shipOptions, { startOption = curShipOption, height = Helper.headerRow1Height, textOverride = name, text2Override = " ", helpOverlayID = "trade_context_shipOptions", helpOverlayText = " ", helpOverlayHighlightOnly = true })
--- 	row[1]:setTextProperties({ halign = "left", font = Helper.headerRow1Font, fontsize = Helper.headerRow1FontSize, color = Color["text_player"] })
--- 	row[1]:setText2Properties({ halign = "right", fontsize = Helper.headerRow1FontSize, x = Helper.standardTextOffsetx })
--- 	row[1].handlers.onDropDownConfirmed = menu.dropdownShip
+      local rowData = tableHandle:addRow(true, { rowData = ware })
+      rowData[1]:createText(sourceInfo and sourceInfo.name or (targetInfo and targetInfo.name) or ware)
+      rowData[2]:createText(formatSide(sourceInfo and sourceInfo.buy), { wordwrap = true, color = diffBuy and (Color and Color["text_warning"]) or nil })
+      rowData[3]:createText(formatSide(targetInfo and targetInfo.buy), { wordwrap = true, color = diffBuy and (Color and Color["text_warning"]) or nil })
+      rowData[4]:createCheckBox(data.cloneBuy[ware], { active = sourceInfo ~= nil })
+      rowData[4].handlers.onClick = function(_, checked)
+        data.cloneBuy[ware] = checked or nil
+      end
+      rowData[5]:createText(formatSide(sourceInfo and sourceInfo.sell), { wordwrap = true, color = diffSell and (Color and Color["text_warning"]) or nil })
+      rowData[6]:createText(formatSide(targetInfo and targetInfo.sell), { wordwrap = true, color = diffSell and (Color and Color["text_warning"]) or nil })
+      rowData[7]:createCheckBox(data.cloneSell[ware], { active = sourceInfo ~= nil })
+      rowData[7].handlers.onClick = function(_, checked)
+        data.cloneSell[ware] = checked or nil
+      end
+    end
+  else
+    local infoRow = tableHandle:addRow(false, { fixed = true })
+    infoRow[1]:setColSpan(columns):createText("Select source and target stations to view trade settings.", { wordwrap = true, color = Color and Color["text_warning"] or nil })
+  end
 
--- 	local othername = Helper.unlockInfo(IsInfoUnlockedForPlayer(convertedTradeOfferContainer, "name"), ffi.string(C.GetComponentName(menu.contextMenuData.component)) .. " (" .. ffi.string(C.GetObjectIDCode(menu.contextMenuData.component)) .. ")")
--- 	local color = Color["text_normal"]
--- 	if isplayertradeoffercontainer then
--- 		color = Color["text_player"]
--- 	end
--- 	local mouseovertext
--- 	if C.IsComponentBlacklisted(convertedTradeOfferContainer, "objectactivity", blacklistgroup, convertedCurrentShip) then
--- 		color = Color["text_warning"]
--- 		if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 			mouseovertext = ColorText["text_warning"] .. ReadText(1026, 3257)
--- 		else
--- 			mouseovertext = ColorText["text_warning"] .. ReadText(1026, 3256)
--- 		end
--- 	end
--- 	if mouseovertext then
--- 		if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 			mouseovertext = mouseovertext .. "\27X\n" .. ReadText(1026, 3258)
--- 		end
--- 	end
--- 	row[5]:setColSpan(5)
--- 	othername = TruncateText(othername, Helper.headerRow1Font, Helper.scaleFont(Helper.headerRow1Font, Helper.headerRow1FontSize), row[5]:getWidth() - 2 * Helper.scaleX(Helper.standardButtonWidth))
--- 	row[5]:createText(othername, { halign = "center", color = color, font = Helper.headerRow1Font, fontsize = Helper.headerRow1FontSize, x = 0, y = Helper.headerRow1Offsety, cellBGColor = Color["row_background"], titleColor = Color["row_title"], mouseOverText = mouseovertext })
+  resetSelections(data, wareList, diffs)
 
--- 	-- locations
--- 	local row = shiptable:addRow(true, { fixed = true })
--- 	row[1]:setBackgroundColSpan(4):setColSpan(4):createText(ReadText(1001, 11039) .. ReadText(1001, 120) .. " " .. shipsectorname, { color = Color["text_inactive"] })
+  tableHandle:addEmptyRow(Helper.standardTextHeight / 2)
 
--- 	local color = Color["text_inactive"]
--- 	local mouseovertext
--- 	if C.IsComponentBlacklisted(stationsector, "sectortravel", blacklistgroup, convertedCurrentShip) then
--- 		color = Color["text_warning"]
--- 		if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 			mouseovertext = ColorText["text_warning"] .. ReadText(1026, 3253)
--- 		else
--- 			mouseovertext = ColorText["text_warning"] .. ReadText(1026, 3252)
--- 		end
--- 	end
--- 	if C.IsComponentBlacklisted(stationsector, "sectoractivity", blacklistgroup, convertedCurrentShip) then
--- 		color = Color["text_warning"]
--- 		if mouseovertext then
--- 			mouseovertext = mouseovertext .. "\n"
--- 		else
--- 			mouseovertext = ""
--- 		end
--- 		if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 			mouseovertext = mouseovertext .. ColorText["text_warning"] .. ReadText(1026, 3255)
--- 		else
--- 			mouseovertext = mouseovertext .. ColorText["text_warning"] .. ReadText(1026, 3254)
--- 		end
--- 	end
--- 	if mouseovertext then
--- 		if convertedCurrentShip and (convertedCurrentShip ~= 0) then
--- 			mouseovertext = mouseovertext .. "\27X\n" .. ReadText(1026, 3258)
--- 		end
--- 	end
--- 	row[5]:setColSpan(5):createText(ffi.string(C.GetComponentName(stationsector)), { halign = "center", color = color, mouseOverText = mouseovertext })
+  row = tableHandle:addRow(true, { fixed = true })
+  row[3]:setColSpan(2):createButton({ active = function()
+    return hasSelection(data) and data.selectedSource ~= nil and data.selectedTarget ~= nil
+  end }):setText(labels.cloneButton, { halign = "center" })
+  row[3].handlers.onClick = function()
+    if hasSelection(data) then
+      applyClone(menu)
+    end
+  end
+  row[5]:setColSpan(2):createButton({  }):setText(labels.cancelButton, { halign = "center" })
+  row[5].handlers.onClick = function()
+    menu.closeContextMenu()
+  end
+  tableHandle:setSelectedCol(5)
 
--- 	-- table header
--- 	local hasshiptargetamounts = false
--- 	local hasothershipttargetamounts = false
--- 	for i, waredata in ipairs(menu.contextMenuData.waredatalist) do
--- 		local shiptargetamount = 0
--- 		if menu.contextMenuData.currentShip ~= 0 then
--- 			shiptargetamount = GetWareProductionLimit(menu.contextMenuData.currentShip, waredata.ware)
--- 		end
--- 		if shiptargetamount > 0 then
--- 			hasshiptargetamounts = true
--- 			if hasothershipttargetamounts then
--- 				break
--- 			end
--- 		end
--- 		local othershiptargetamount = GetWareProductionLimit(ConvertStringTo64Bit(tostring(menu.contextMenuData.component)), waredata.ware)
--- 		if othershiptargetamount > 0 then
--- 			hasothershipttargetamounts = true
--- 			if hasshiptargetamounts then
--- 				break
--- 			end
--- 		end
--- 	end
+  frame.properties.height = math.min(Helper.viewHeight - frame.properties.y, frame:getUsedHeight() + Helper.borderSize)
+  frame:display()
+  data.frame = frame
+  menu.contextFrame = frame
+end
 
--- 	local headerproperties = { font = Helper.standardFontBold, cellBGColor = Color["row_background"], titleColor = Color["row_title"] }
--- 	local row = shiptable:addRow(nil, { fixed = true })
--- 	if menu.contextMenuData.wareexchange then
--- 		row[1]:setColSpan(2):setBackgroundColSpan(1):createText(ReadText(1001, 45), headerproperties)
--- 		row[3]:createText(ReadText(1001, 5) .. (hasshiptargetamounts and (" (" .. ReadText(1001, 2903) .. ")") or ""), headerproperties)
--- 		row[4]:setColSpan(2):createText(" ", headerproperties)
--- 		row[6]:setColSpan(2):createText(((C.IsComponentClass(menu.contextMenuData.component, "ship") and ReadText(1001, 5)) or (C.IsComponentClass(menu.contextMenuData.component, "station") and ReadText(1001, 3)) or ReadText(1001, 9426)) .. (hasothershipttargetamounts and (" (" .. ReadText(1001, 2903) .. ")") or ""), headerproperties)
--- 		row[8]:setColSpan(2):createText(" ", headerproperties)
--- 	else
--- 		row[1]:setBackgroundColSpan(1):createText(ReadText(1001, 45), headerproperties)
--- 		row[2]:createText(ReadText(1001, 2808), headerproperties)
--- 		row[3]:createText(ReadText(1001, 5) .. (hasshiptargetamounts and (" (" .. ReadText(1001, 2903) .. ")") or ""), headerproperties)
--- 		row[4]:setColSpan(2):createText(" ", headerproperties)
--- 		row[6]:setColSpan(2):createText(ReadText(1001, 8308), headerproperties)
--- 		row[8]:setColSpan(2):createText(ReadText(1001, 8309), headerproperties)
--- 	end
+function TradeConfigExchanger.show()
+  local menu = TradeConfigExchanger.mapMenu
+  if type(menu) ~= "table" or type(Helper) ~= "table" then
+    debugTrace("TradeConfigExchanger: Show: Invalid menu instance or Helper UI utilities are not available")
+    return
+  end
 
--- 	-- line
--- 	local row = shiptable:addRow(nil, { fixed = true, bgColor = Color["row_separator"] })
--- 	row[1]:setColSpan(9):createText("", { fontsize = 1, height = 1 })
 
--- 	-- ware list
--- 	local warningcontent = {}
--- 	local pricemodifiers = {}
--- 	local warningcolor = Color["text_error"]
+  if type(menu) ~= "table" or type(menu.closeContextMenu) ~= "function" then
+    return false, "Menu instance is not available"
+  end
+  if type(Helper) ~= "table" then
+    return false, "Helper UI utilities are not available"
+  end
 
--- 	local maxVisibleHeight
+  menu.closeContextMenu()
 
--- 	if #menu.contextMenuData.waredatalist == 0 then
--- 		menu.selectedTradeWare = nil
--- 		local row = shiptable:addRow(nil, {  })
--- 		row[1]:setColSpan(9):createText(menu.contextMenuData.wareexchange and ReadText(1001, 8310) or ReadText(1001, 8311))
--- 	else
--- 		-- check selectedTradeWare
--- 		local tradewarefound = false
--- 		if menu.selectedTradeWare then
--- 			for i, waredata in ipairs(menu.contextMenuData.waredatalist) do
--- 				if (waredata.ware == menu.selectedTradeWare.ware) and (waredata.mission == menu.selectedTradeWare.mission) then
--- 					tradewarefound = true
--- 					break
--- 				end
--- 			end
--- 			if not tradewarefound then
--- 				menu.selectedTradeWare = nil
--- 			end
--- 		end
+  local data = {
+    mode = "trade_config_exchanger",
+    layer = menu.contextFrameLayer or 2,
+    width = Helper.scaleX(900),
+    xoffset = Helper.viewWidth / 2 - Helper.scaleX(450),
+    yoffset = Helper.viewHeight / 6,
+    requireMatch = true,
+    cloneBuy = {},
+    cloneSell = {},
+    pendingResetSelections = true,
+  }
 
--- 		local reservations, missionreservations = {}, {}
--- 		local n = C.GetNumContainerWareReservations2(menu.contextMenuData.component, true, true, true)
--- 		local buf = ffi.new("WareReservationInfo2[?]", n)
--- 		n = C.GetContainerWareReservations2(buf, n, menu.contextMenuData.component, true, true, true)
--- 		for i = 0, n - 1 do
--- 			if (buf[i].missionid ~= 0) or (not buf[i].isvirtual) then
--- 				local ware = ffi.string(buf[i].ware)
--- 				local buyflag = buf[i].isbuyreservation and "selloffer" or "buyoffer" -- sic! Reservation to buy -> container is selling
--- 				local invbuyflag = buf[i].isbuyreservation and "buyoffer" or "selloffer"
--- 				local reservationref = (buf[i].missionid ~= 0) and missionreservations or reservations
--- 				if reservationref[ware] then
--- 					table.insert(reservationref[ware][buyflag], { reserver = buf[i].reserverid, amount = buf[i].amount, eta = buf[i].eta, mission = buf[i].missionid })
--- 				else
--- 					reservationref[ware] = { [buyflag] = { { reserver = buf[i].reserverid, amount = buf[i].amount, eta = buf[i].eta, mission = buf[i].missionid } }, [invbuyflag] = {} }
--- 				end
--- 			end
--- 		end
--- 		for _, data in pairs(reservations) do
--- 			table.sort(data.buyoffer, menu.etaSorter)
--- 			table.sort(data.selloffer, menu.etaSorter)
--- 		end
--- 		for _, data in pairs(missionreservations) do
--- 			table.sort(data.buyoffer, menu.etaSorter)
--- 			table.sort(data.selloffer, menu.etaSorter)
--- 		end
+  data.stations, data.sourceOptions = buildStationCache()
 
--- 		for i, waredata in ipairs(menu.contextMenuData.waredatalist) do
--- 			local content = menu.getTradeContextRowContent(waredata)
+  data.selectedSource =  nil
+  data.selectedTarget = nil
 
--- 			local row = shiptable:addRow({ ware = waredata.ware, mission = waredata.mission, issupply = waredata.issupply }, {  })
--- 			local callback = menu.getAmmoTypeNameByWare(waredata.ware) and menu.slidercellShipAmmo or menu.slidercellShipCargo
--- 			if menu.contextMenuData.wareexchange then
--- 				row[1]:setColSpan(2):createText(content[1].text, { color = content[1].color })
--- 				row[3]:createText(content[3].text, { color = content[3].color, halign = "right" })
--- 				row[4]:setColSpan(2):createSliderCell({ start = content[4].scale.start, min = content[4].scale.min, minSelect = content[4].scale.minselect, max = content[4].scale.max, maxSelect = content[4].scale.maxselect, step = content[4].scale.step, suffix = content[4].scale.suffix, fromCenter = content[4].scale.fromcenter, rightToLeft = content[4].scale.righttoleft, height = Helper.standardTextHeight })
--- 				row[4].handlers.onSliderCellChanged = function (_, value) return callback(waredata.sell and waredata.sell.id, waredata.buy and waredata.buy.id, waredata.ware, 0, value) end
--- 				row[4].handlers.onSliderCellConfirm = function () return menu.slidercellTradeConfirmed(waredata.ware) end
--- 				waredata.sellcol = 6
--- 				row[6]:setColSpan(2):createText(content[6].text, { color = content[6].color, halign = "right", mouseOverText = content[6].mouseover })
--- 			else
--- 				row[1]:createText(content[1].text, { color = content[1].color, mouseOverText = content[1].mouseover })
--- 				row[2]:createText(content[2].text, { color = content[2].color, halign = "right", mouseOverText = content[2].mouseover })
--- 				row[3]:createText(content[3].text, { color = content[3].color, halign = "right" })
--- 				row[4]:setColSpan(2):createSliderCell({ start = content[4].scale.start, min = content[4].scale.min, minSelect = content[4].scale.minselect, max = content[4].scale.max, maxSelect = content[4].scale.maxselect, step = content[4].scale.step, suffix = content[4].scale.suffix, fromCenter = content[4].scale.fromcenter, rightToLeft = content[4].scale.righttoleft, height = Helper.standardTextHeight })
--- 				row[4].handlers.onSliderCellChanged = function (_, value) return callback(waredata.sell and waredata.sell.id, waredata.buy and waredata.buy.id, waredata.ware, 0, value) end
--- 				row[4].handlers.onSliderCellConfirm = function () return menu.slidercellTradeConfirmed(waredata.ware) end
+  updateTargetOptions(data)
 
--- 				local reservationref = waredata.mission and missionreservations or reservations
--- 				local colspan = 2
--- 				if reservationref[waredata.ware] and (#reservationref[waredata.ware].selloffer > 0) then
--- 					local mouseovertext = ""
--- 					for i, reservation in ipairs(reservationref[waredata.ware].selloffer) do
--- 						if (not waredata.mission) or (waredata.mission == reservation.mission) then
--- 							local isplayerowned = GetComponentData(ConvertStringTo64Bit(tostring(reservation.reserver)), "isplayerowned")
--- 							if isplayerowned or isplayertradeoffercontainer then
--- 								if mouseovertext ~= "" then
--- 									mouseovertext = mouseovertext .. "\n"
--- 								end
--- 								local name = (isplayerowned and ColorText["text_player"] or "") .. ffi.string(C.GetComponentName(reservation.reserver)) .. " (" .. ffi.string(C.GetObjectIDCode(reservation.reserver)) .. ")\27X"
--- 								mouseovertext = mouseovertext .. name .. " - " .. (waredata.mission and ColorText["text_mission"] or "") .. ReadText(1001, 1202) .. ReadText(1001, 120) .. " " .. ConvertIntegerString(reservation.amount, true, 0, true) .. "\27X"
--- 							end
--- 						end
--- 					end
--- 					if mouseovertext ~= "" then
--- 						colspan = 1
--- 						mouseovertext = ReadText(1001, 7946) .. ReadText(1001, 120) .. "\n" .. mouseovertext
--- 						row[6]:createIcon("menu_hourglass", { color = waredata.mission and Color["text_mission"] or nil, height = config.mapRowHeight, mouseOverText = mouseovertext })
--- 					end
--- 				end
--- 				waredata.sellcol = 8 - colspan
--- 				row[8 - colspan]:setColSpan(colspan):createText(content[6].text, { color = content[6].color, halign = "right", mouseOverText = content[6].mouseover })
--- 				colspan = 2
--- 				if reservationref[waredata.ware] and (#reservationref[waredata.ware].buyoffer > 0) then
--- 					local mouseovertext = ""
--- 					for i, reservation in ipairs(reservationref[waredata.ware].buyoffer) do
--- 						if (not waredata.mission) or (waredata.mission == reservation.mission) then
--- 							local isplayerowned = GetComponentData(ConvertStringTo64Bit(tostring(reservation.reserver)), "isplayerowned")
--- 							if isplayerowned or isplayertradeoffercontainer then
--- 								if mouseovertext ~= "" then
--- 									mouseovertext = mouseovertext .. "\n"
--- 								end
--- 								local name = (isplayerowned and ColorText["text_player"] or "") .. ffi.string(C.GetComponentName(reservation.reserver)) .. " (" .. ffi.string(C.GetObjectIDCode(reservation.reserver)) .. ")\27X"
--- 								mouseovertext = mouseovertext .. name .. " - " .. (waredata.mission and ColorText["text_mission"] or "") .. ReadText(1001, 1202) .. ReadText(1001, 120) .. " " .. ConvertIntegerString(reservation.amount, true, 0, true) .. "\27X"
--- 							end
--- 						end
--- 					end
--- 					if mouseovertext ~= "" then
--- 						colspan = 1
--- 						mouseovertext = ReadText(1001, 7946) .. ReadText(1001, 120) .. "\n" .. mouseovertext
--- 						row[8]:createIcon("menu_hourglass", { color = waredata.mission and Color["text_mission"] or nil, height = config.mapRowHeight, mouseOverText = mouseovertext })
--- 					end
--- 				end
--- 				waredata.buycol = 10 - colspan
--- 				row[10 - colspan]:setColSpan(colspan):createText(content[7].text, { color = content[7].color, halign = "right" })
--- 			end
+  menu.contextMenuMode = data.mode
+  menu.contextMenuData = data
 
--- 			if not menu.selectedRows.contextshiptable then
--- 				if (waredata.sell and IsSameTrade(waredata.sell.id, menu.contextMenuData.tradeid)) or (waredata.buy and IsSameTrade(waredata.buy.id, menu.contextMenuData.tradeid)) then
--- 					menu.selectedTradeWare = { ware = waredata.ware, mission = waredata.mission, issupply = waredata.issupply }
--- 					menu.topRows.contextshiptable = math.min(4 + i, 4 + #menu.contextMenuData.waredatalist - (menu.tradeContext.warescrollwindowsize - 1))
--- 					shiptable:setSelectedRow(row.index)
--- 				end
--- 			end
--- 			if not menu.selectedTradeWare then
--- 				menu.selectedTradeWare = { ware = waredata.ware, mission = waredata.mission, issupply = waredata.issupply }
--- 			end
--- 			if (waredata.ware == menu.selectedTradeWare.ware) and (waredata.mission == menu.selectedTradeWare.mission) and (waredata.issupply == menu.selectedTradeWare.issupply) then
--- 				warningcontent = content[8]
--- 				if waredata.ware == menu.showOptionalWarningWare then
--- 					if (content[4].scale.start ~= 0) and (content[4].scale.start == content[4].scale.maxselect) then
--- 						warningcontent = content[9]
--- 						warningcolor = Color["text_warning"]
--- 					elseif (content[4].scale.start ~= 0) and (content[4].scale.start == content[4].scale.minselect) then
--- 						warningcontent = content[10]
--- 						warningcolor = Color["text_warning"]
--- 					else
--- 						menu.showOptionalWarningWare = nil
--- 					end
--- 				end
+  TradeConfigExchanger.render()
 
--- 				pricemodifiers = content[11]
--- 			end
+  return true
+end
 
--- 			if i == menu.tradeContext.warescrollwindowsize then
--- 				maxVisibleHeight = shiptable:getFullHeight()
--- 			end
--- 		end
--- 	end
+function TradeConfigExchanger.ProcessRequest(_, _)
+  return TradeConfigExchanger.show()
+end
 
--- 	shiptable.properties.maxVisibleHeight = maxVisibleHeight or shiptable:getFullHeight()
 
--- 	shiptable:setTopRow(menu.topRows.contextshiptable)
--- 	if menu.selectedRows.contextshiptable then
--- 		shiptable:setSelectedRow(menu.selectedRows.contextshiptable)
--- 	end
--- 	menu.topRows.contextshiptable = nil
--- 	menu.selectedRows.contextshiptable = nil
+function TradeConfigExchanger.Init()
+  getPlayerId()
+  ---@diagnostic disable-next-line: undefined-global
+  RegisterEvent("TradeConfigExchanger.Request", TradeConfigExchanger.ProcessRequest)
+  AddUITriggeredEvent("TradeConfigExchanger", "Reloaded")
+  TradeConfigExchanger.mapMenu = Lib.Get_Egosoft_Menu("MapMenu")
+  debugTrace("MapMenu is " .. tostring(TradeConfigExchanger.mapMenu))
+end
 
--- 	-- info and buttons
--- 	-- the button table is split into left and right side below the "zero" position of the sliders
--- 	local columnwidth_bottomleft		= columnwidth_ware + columnwidth_price + columnwidth_shipstorage + columnwidth_sliderleft + 3 * Helper.borderSize
--- 	local columnwidth_bottomright		= columnwidth_sliderright + columnwidth_selloffer + columnwidth_buyoffer + 2 * Helper.borderSize
--- 	-- trade menu case:
--- 	-- split bottom right twice: Once into 2/3 + 1/3 for money output, and 1/2 + 1/2 for the buttons
--- 	-- A-----------------------------------------B------------C----D--------E
--- 	-- | Ship storage details  (bottomleft)      | Profits:        | 100 Cr |
--- 	-- +-----------------------------------------+------------+----+--------+
--- 	-- |                                         | LeftButton | RightButton |
--- 	-- +-----------------------------------------+------------+----+--------+
--- 	local columnwidth_br_leftoutput		= math.floor((columnwidth_bottomright - Helper.borderSize) * 2 / 3)			-- BD
--- 	local columnwidth_br_rightoutput	= columnwidth_bottomright - columnwidth_br_leftoutput - Helper.borderSize	-- DE
--- 	local columnwidth_br_leftbutton		= math.floor((columnwidth_bottomright - Helper.borderSize) / 2)				-- BC
--- 	local columnwidth_br_rightbutton	= columnwidth_bottomright - columnwidth_br_leftbutton - Helper.borderSize	-- CE
--- 	local columnwidth_br_bottomoverlap	= columnwidth_bottomright - columnwidth_br_leftbutton - columnwidth_br_rightoutput - 2 * Helper.borderSize			-- CD
--- 	-- ware exchange menu case:
--- 	-- "zero" position is in the center. Split bottom right twice, so that each button occupies ca. 20% of the width (40% together)
--- 	-- A-----------------------------------B-----C------------D-------------E
--- 	-- | Ship storage details (bottomleft) | Other ship storage details     |
--- 	-- +-----------------------------------+-----+------------+-------------+
--- 	-- |                                         | LeftButton | RightButton |
--- 	-- +-----------------------------------+-----+------------+-------------+
--- 	local columnwidth_wx_br_leftbutton	= math.floor((columnwidth_bottomright - 2 * Helper.borderSize) * 2 / 5)		-- CD
--- 	local columnwidth_wx_br_rightbutton	= columnwidth_wx_br_leftbutton												-- DE
--- 	local columnwidth_wx_br_leftspacing	= columnwidth_bottomright - columnwidth_wx_br_leftbutton - columnwidth_wx_br_rightbutton - 2 * Helper.borderSize	-- BC
+Register_Require_With_Init("extensions.stations_tce.ui.trade_config_exchanger", TradeConfigExchanger, TradeConfigExchanger.Init)
 
--- 	local showdiscountinfo = (not menu.contextMenuData.wareexchange) and (not isplayertradeoffercontainer)
--- 	local numcols = showdiscountinfo and 6 or 4
--- 	local coloffset = showdiscountinfo and 2 or 0
--- 	menu.tradeContext.coloffset = coloffset
--- 	local buttontable = frame:addTable(numcols, { tabOrder = 3, x = Helper.borderSize, y = shiptable.properties.y + shiptable:getVisibleHeight() + Helper.borderSize, width = menu.contextMenuData.width, reserveScrollBar = false })
--- 	if showdiscountinfo then
--- 		buttontable:setColWidth(1, 2 * math.floor(columnwidth_bottomleft / 3), false)
--- 		buttontable:setColWidth(2, math.floor(0.6 * columnwidth_bottomleft / 3) - 2 * Helper.borderSize, false)
--- 		buttontable:setColWidth(3, math.floor(0.4 * columnwidth_bottomleft / 3), false)
--- 		buttontable:setColWidth(4, columnwidth_br_leftbutton,     false)
--- 		buttontable:setColWidth(5, columnwidth_br_bottomoverlap,  false)
--- 		buttontable:setColWidth(6, columnwidth_br_rightoutput,    false)
--- 		buttontable:setDefaultBackgroundColSpan(2, 2)
--- 		buttontable:setDefaultBackgroundColSpan(4, 3)
--- 	elseif menu.contextMenuData.wareexchange then
--- 		buttontable:setColWidth(1, columnwidth_bottomleft, false)
--- 		buttontable:setColWidth(2, columnwidth_wx_br_leftspacing, false)
--- 		buttontable:setColWidth(3, columnwidth_wx_br_leftbutton,  false)
--- 		buttontable:setColWidth(4, columnwidth_wx_br_rightbutton, false)
--- 		buttontable:setDefaultBackgroundColSpan(2, 3)
--- 	else
--- 		buttontable:setColWidth(1, columnwidth_bottomleft, false)
--- 		buttontable:setColWidth(2, columnwidth_br_leftbutton,     false)
--- 		buttontable:setColWidth(3, columnwidth_br_bottomoverlap,  false)
--- 		buttontable:setColWidth(4, columnwidth_br_rightoutput,    false)
--- 		buttontable:setDefaultBackgroundColSpan(2, 3)
--- 	end
-
--- 	-- line
--- 	local row = buttontable:addRow(nil, { fixed = true, bgColor = Color["row_separator"] })
--- 	row[1]:setColSpan(numcols):createText("", { fontsize = 1, height = 1 })
-
--- 	-- rows
--- 	local headerrow = buttontable:addRow(nil, { fixed = true, bgColor = Color["row_background_unselectable"] })
--- 	local inforows = {}
--- 	local warningrows = {}
--- 	for i = 1, menu.tradeContext.numinforows do
--- 		inforows[i] = buttontable:addRow(nil, { fixed = true })
--- 	end
--- 	local headerrow2 = buttontable:addRow(nil, { fixed = true })
--- 	for i = 1, menu.tradeContext.numwarningrows do
--- 		warningrows[i] = buttontable:addRow(i == menu.tradeContext.numwarningrows, { fixed = true })
--- 	end
-
--- 	-- storage details
--- 	local storagecontent = menu.getTradeContextShipStorageContent()
--- 	local storageheader = #storagecontent > 0 and ReadText(1001, 11654) or ReadText(1001, 11655)
--- 	for i, content in ipairs(storagecontent) do
--- 		if i <= menu.tradeContext.numinforows then
--- 			inforows[i][1]:createSliderCell({ min = content.scale.min, max = content.scale.max, start = content.scale.start, step = content.scale.step, suffix = content.scale.suffix, readOnly = content.scale.readonly, height = Helper.standardTextHeight }):setText(content.name, { color = content.color })
--- 		end
--- 	end
-
--- 	-- warnings
--- 	local i = 0
--- 	if not candock then
--- 		i = i + 1
--- 		if i <= menu.tradeContext.numwarningrows then
--- 			warningrows[i][1]:createText(ReadText(1001, 6211), { color = Color["text_error"] })
--- 		end
--- 	end
--- 	if missingdrones then
--- 		i = i + 1
--- 		if i <= menu.tradeContext.numwarningrows then
--- 			warningrows[i][1]:createText(ReadText(1001, 2978), { color = Color["text_error"] })
--- 		end
--- 	end
-
--- 	for _, content in pairs(warningcontent) do
--- 		i = i + 1
--- 		if i <= menu.tradeContext.numwarningrows then
--- 			warningrows[i][1]:createText(content, { color = warningcolor, wordwrap = true })
--- 		end
--- 	end
-
--- 	if isplayertraderestricted then
--- 		i = i + 1
--- 		if i <= menu.tradeContext.numwarningrows then
--- 			warningrows[i][1]:createText(ReadText(1001, 6212), { color = Color["text_warning"] })
--- 		end
--- 	end
-
--- 	local confirmbuttonactive = false
--- 	if candock and (not missingdrones) then
--- 		for _, amount in pairs(menu.contextMenuData.orders) do
--- 			if amount ~= 0 then
--- 				confirmbuttonactive = true
--- 				break
--- 			end
--- 		end
--- 	end
-
--- 	local header2properties = { halign = "center", font = Helper.standardFontBold, cellBGColor = Color["row_background"], titleColor = Color["row_title"] }
--- 	if menu.contextMenuData.wareexchange then
--- 		local otherstoragecontent = menu.getTradeContextShipStorageContent(true)
--- 		local otherstorageheader = #otherstoragecontent > 0 and
--- 			(
--- 				(C.IsComponentClass(menu.contextMenuData.component, "ship") and ReadText(1001, 11654))
--- 				or (C.IsComponentClass(menu.contextMenuData.component, "station") and ReadText(1001, 11656))
--- 				or ReadText(1001, 11658)
--- 			)
--- 			or (
--- 				(C.IsComponentClass(menu.contextMenuData.component, "ship") and ReadText(1001, 11655))
--- 				or (C.IsComponentClass(menu.contextMenuData.component, "station") and ReadText(1001, 11657))
--- 				or ReadText(1001, 11659)
--- 			)
-
--- 		-- header
--- 		headerrow[1]:createText(storageheader, header2properties)
--- 		headerrow[2]:setColSpan(3):createText(otherstorageheader, header2properties)
-
--- 		-- other ship info
--- 		for i = 1, menu.tradeContext.numinforows do
--- 			local content = otherstoragecontent[i]
--- 			if content then
--- 				inforows[i][2]:setColSpan(3):createSliderCell({ min = content.scale.min, max = content.scale.max, start = content.scale.start, step = content.scale.step, suffix = content.scale.suffix, readOnly = content.scale.readonly, height = Helper.standardTextHeight }):setText(content.name, { color = content.color })
--- 			end
--- 		end
-
--- 		-- warning header
--- 		headerrow2[1]:createText(next(warningcontent) and ReadText(1001, 8342) or "", header2properties)
-
--- 		-- buttons
--- 		warningrows[menu.tradeContext.numwarningrows][3]:createButton({ active = confirmbuttonactive, height = Helper.standardTextHeight }):setText(ReadText(1001, 2821), { halign = "center" })
--- 		warningrows[menu.tradeContext.numwarningrows][3].handlers.onClick = menu.buttonConfirmTrade
--- 		warningrows[menu.tradeContext.numwarningrows][3].properties.uiTriggerID = "confirmtrade"
--- 		warningrows[menu.tradeContext.numwarningrows][4]:createButton({ height = Helper.standardTextHeight }):setText(ReadText(1001, 64), { halign = "center" })
--- 		warningrows[menu.tradeContext.numwarningrows][4].handlers.onClick = menu.buttonCancelTrade
--- 		warningrows[menu.tradeContext.numwarningrows][4].properties.uiTriggerID = "canceltrade"
--- 	else
--- 		-- profits from sales
--- 		local profit = menu.contextMenuData.referenceprofit
--- 		local profitcolor = Color["text_normal"]
--- 		if profit < 0 then
--- 			profitcolor = Color["text_negative"]
--- 		elseif profit > 0 then
--- 			profitcolor = Color["text_positive"]
--- 		end
--- 		inforows[menu.tradeContext.numinforows - 1][2 + coloffset]:createText(ReadText(1001, 8305) .. ReadText(1001, 120))
--- 		inforows[menu.tradeContext.numinforows - 1][3 + coloffset]:setColSpan(2):createText(ConvertMoneyString(profit, false, true, nil, true) .. " " .. ReadText(1001, 101), { halign = "right", color = profitcolor })
-
--- 		-- transaction value
--- 		local total = menu.contextMenuData.totalbuyprofit - menu.contextMenuData.totalsellcost
--- 		local transactioncolor = Color["text_normal"]
--- 		if total < 0 then
--- 			transactioncolor = Color["text_negative"]
--- 		elseif total > 0 then
--- 			transactioncolor = Color["text_positive"]
--- 		end
--- 		inforows[menu.tradeContext.numinforows][2 + coloffset]:createText(ReadText(1001, 2005) .. ReadText(1001, 120)) -- Transaction value, :
--- 		inforows[menu.tradeContext.numinforows][3 + coloffset]:setColSpan(2):createText(ConvertMoneyString(total, false, true, nil, true) .. " " .. ReadText(1001, 101), { halign = "right", color = transactioncolor })
-
--- 		-- pricing details
--- 		if showdiscountinfo and (#pricemodifiers > 0) then
--- 			for i, entry in ipairs(pricemodifiers) do
--- 				if i < #pricemodifiers then
--- 					local row
--- 					if i <= menu.tradeContext.numinforows then
--- 						row = inforows[i]
--- 					elseif i == menu.tradeContext.numinforows + 1 then
--- 						row = headerrow2
--- 					elseif i <= menu.tradeContext.numinforows + 1 + menu.tradeContext.numwarningrows - 1 then
--- 						row = warningrows[i - menu.tradeContext.numinforows - 1]
--- 					end
--- 					if row then
--- 						row[2]:createText(entry.text, { x = config.tradeContextMenuInfoBorder })
--- 						row[3]:createText(entry.amount, { x = config.tradeContextMenuInfoBorder, halign = "right" })
--- 					end
--- 				end
--- 			end
--- 			local y = math.max(0, warningrows[menu.tradeContext.numwarningrows]:getHeight() - Helper.scaleY(Helper.standardTextHeight))
--- 			warningrows[menu.tradeContext.numwarningrows][2]:createText(pricemodifiers[#pricemodifiers].text, { scaling = false, fontsize = Helper.scaleFont(Helper.standardFont, Helper.standardFontSize), x = Helper.scaleX(config.tradeContextMenuInfoBorder), y = y })
--- 			warningrows[menu.tradeContext.numwarningrows][3]:createText(pricemodifiers[#pricemodifiers].amount, { scaling = false, fontsize = Helper.scaleFont(Helper.standardFont, Helper.standardFontSize), x = Helper.scaleX(config.tradeContextMenuInfoBorder), y = y, halign = "right" })
--- 		end
-
--- 		-- header
--- 		headerrow[1]:createText(storageheader, header2properties)
--- 		if showdiscountinfo then
--- 			headerrow[2]:setColSpan(2):createText(ReadText(1001, 11653), header2properties)
--- 		end
--- 		headerrow[2 + coloffset]:setColSpan(3):createText(ReadText(1001, 2006), header2properties)
-
--- 		-- warning header
--- 		headerrow2[1]:createText(next(warningcontent) and ReadText(1001, 8342) or "", header2properties)
-
--- 		-- buttons
--- 		local y = math.max(0, warningrows[menu.tradeContext.numwarningrows]:getHeight() - Helper.scaleY(Helper.standardTextHeight))
--- 		if (not GetComponentData(menu.contextMenuData.component, "tradesubscription")) and (#menu.contextMenuData.missionoffers == 0) then
--- 			warningrows[menu.tradeContext.numwarningrows][2 + coloffset]:createButton({ active = (menu.contextMenuData.currentShip ~= 0) and C.IsOrderSelectableFor("Player_DockToTrade", menu.contextMenuData.currentShip), scaling = false, height = Helper.scaleY(Helper.standardTextHeight), y = y }):setText(ReadText(1001, 7858), { scaling = true, halign = "center" })
--- 			warningrows[menu.tradeContext.numwarningrows][2 + coloffset].handlers.onClick = menu.buttonDockToTrade
--- 		else
--- 			warningrows[menu.tradeContext.numwarningrows][2 + coloffset]:createButton({ active = confirmbuttonactive, helpOverlayID = "map_confirmtrade", helpOverlayText = " ", helpOverlayHighlightOnly = true, scaling = false, height = Helper.scaleY(Helper.standardTextHeight), y = y }):setText(ReadText(1001, 2821), { scaling = true, halign = "center" })
--- 			warningrows[menu.tradeContext.numwarningrows][2 + coloffset].handlers.onClick = menu.buttonConfirmTrade
--- 			warningrows[menu.tradeContext.numwarningrows][2 + coloffset].properties.uiTriggerID = "confirmtrade"
--- 		end
--- 		warningrows[menu.tradeContext.numwarningrows][3 + coloffset]:setColSpan(2):createButton({ scaling = false, height = Helper.scaleY(Helper.standardTextHeight), y = y }):setText(ReadText(1001, 64), { scaling = true, halign = "center" })
--- 		warningrows[menu.tradeContext.numwarningrows][3 + coloffset].handlers.onClick = menu.buttonCancelTrade
--- 		warningrows[menu.tradeContext.numwarningrows][3 + coloffset].properties.uiTriggerID = "canceltrade"
--- 	end
-
--- 	if buttontable.properties.y + buttontable:getFullHeight() > Helper.viewHeight - frame.properties.y then
--- 		frame.properties.y = Helper.viewHeight - buttontable.properties.y - buttontable:getFullHeight() - Helper.frameBorder
--- 	end
-
--- 	shiptable.properties.nextTable = buttontable.index
--- 	buttontable.properties.prevTable = shiptable.index
--- end
-
-Init()
-
-return
+return TradeConfigExchanger
