@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<addon name="trade_config_exchanger" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">
-    <environment type="menus">
-        <file name="ui/trade_config_exchanger.lua" />
-    </environment>
+<addon name="trade_config_exchanger" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">
+  <environment type="menus">
+    <dependency name="sn_mod_support_apis" />
+    <dependency name="ego_detailmonitor" />
+    <file name="ui/trade_config_exchanger.lua" />
+  </environment>
 </addon>
