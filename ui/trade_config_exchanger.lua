@@ -590,8 +590,14 @@ end
 
 local overrideIcons = {
 }
-overrideIcons[true] = "\27[widget_cross_01]\27X"
-overrideIcons[false] = "\27[bordersquare]\27X"
+overrideIcons[true] = "\27[menu_radio_button_on]\27X"
+overrideIcons[false] = "\27[menu_radio_button_off]\27X"
+
+local overrideIconsOptions = {
+}
+overrideIconsOptions[true] = { halign = "center" }
+overrideIconsOptions[false] = { halign = "center", color = Color["text_inactive"] }
+
 
 local function optionsOverride(override)
   if override then
@@ -1062,21 +1068,22 @@ function TradeConfigExchanger.render()
           end
           local row = tableHandle:addRow(true)
           row[2]:setColSpan(4):createText(ware.name, Helper.headerRowCenteredProperties)
-          row[6]:createText(overrideIcons[sourceInfo.storageLimitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+          row[6]:createText(overrideIcons[sourceInfo.storageLimitOverride], overrideIconsOptions[sourceInfo.storageLimitOverride])
           row[7]:createText(formatLimit(sourceInfo.storageLimit, sourceInfo.storageLimitOverride),
-            optionsNumber(sourceInfo.storageLimitOverride))          if targetInfo then
-            row[12]:createText(overrideIcons[targetInfo.storageLimitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            optionsNumber(sourceInfo.storageLimitOverride))
+          if targetInfo then
+            row[12]:createText(overrideIcons[targetInfo.storageLimitOverride], overrideIconsOptions[targetInfo.storageLimitOverride])
             row[13]:createText(formatLimit(targetInfo.storageLimit, targetInfo.storageLimitOverride),
               optionsNumber(targetInfo.storageLimitOverride))
           end
           local row = tableHandle:addRow(true)
           if sourceInfo.buy and sourceInfo.buy.allowed then
-            row[2]:createText(overrideIcons[sourceInfo.buy.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[2]:createText(overrideIcons[sourceInfo.buy.ruleOverride], overrideIconsOptions[sourceInfo.buy.ruleOverride])
             row[3]:createText(formatTradeRuleLabel(sourceInfo.buy.rule, sourceInfo.buy.ruleOverride), optionsRule(sourceInfo.buy.ruleOverride))
-            row[4]:createText(overrideIcons[sourceInfo.buy.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[4]:createText(overrideIcons[sourceInfo.buy.priceOverride], overrideIconsOptions[sourceInfo.buy.priceOverride])
             row[5]:createText(formatPrice(sourceInfo.buy.price, sourceInfo.buy.priceOverride),
               optionsNumber(sourceInfo.buy.priceOverride))
-            row[6]:createText(overrideIcons[sourceInfo.buy.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[6]:createText(overrideIcons[sourceInfo.buy.limitOverride], overrideIconsOptions[sourceInfo.buy.limitOverride])
             row[7]:createText(formatLimit(sourceInfo.buy.limit, sourceInfo.buy.limitOverride),
               optionsNumber(sourceInfo.buy.limitOverride))
           else
@@ -1084,12 +1091,12 @@ function TradeConfigExchanger.render()
           end
           if targetInfo then
             if targetInfo.buy and targetInfo.buy.allowed then
-              row[8]:createText(overrideIcons[targetInfo.buy.ruleOverride],  { halign = "center", color = Color["checkbox_background_default"] })
+              row[8]:createText(overrideIcons[targetInfo.buy.ruleOverride],  overrideIconsOptions[targetInfo.buy.ruleOverride])
               row[9]:createText(formatTradeRuleLabel(targetInfo.buy.rule, targetInfo.buy.ruleOverride), optionsRule(targetInfo.buy.ruleOverride))
-              row[10]:createText(overrideIcons[targetInfo.buy.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[10]:createText(overrideIcons[targetInfo.buy.priceOverride], overrideIconsOptions[targetInfo.buy.priceOverride])
               row[11]:createText(formatPrice(targetInfo.buy.price, targetInfo.buy.priceOverride),
                 optionsNumber(targetInfo.buy.priceOverride))
-              row[12]:createText(overrideIcons[targetInfo.buy.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[12]:createText(overrideIcons[targetInfo.buy.limitOverride], overrideIconsOptions[targetInfo.buy.limitOverride])
               row[13]:createText(formatLimit(targetInfo.buy.limit, targetInfo.buy.limitOverride),
                 optionsNumber(targetInfo.buy.limitOverride))
             else
@@ -1098,12 +1105,12 @@ function TradeConfigExchanger.render()
           end
           local row = tableHandle:addRow(true)
           if sourceInfo.sell and sourceInfo.sell.allowed then
-            row[2]:createText(overrideIcons[sourceInfo.sell.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[2]:createText(overrideIcons[sourceInfo.sell.ruleOverride], overrideIconsOptions[sourceInfo.sell.ruleOverride])
             row[3]:createText(formatTradeRuleLabel(sourceInfo.sell.rule, sourceInfo.sell.ruleOverride), optionsRule(sourceInfo.sell.ruleOverride))
-            row[4]:createText(overrideIcons[sourceInfo.sell.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[4]:createText(overrideIcons[sourceInfo.sell.priceOverride], overrideIconsOptions[sourceInfo.sell.priceOverride])
             row[5]:createText(formatPrice(sourceInfo.sell.price, sourceInfo.sell.priceOverride),
               optionsNumber(sourceInfo.sell.priceOverride))
-            row[6]:createText(overrideIcons[sourceInfo.sell.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[6]:createText(overrideIcons[sourceInfo.sell.limitOverride], overrideIconsOptions[sourceInfo.sell.limitOverride])
             row[7]:createText(formatLimit(sourceInfo.sell.limit, sourceInfo.sell.limitOverride),
               optionsNumber(sourceInfo.sell.limitOverride))
           else
@@ -1111,12 +1118,12 @@ function TradeConfigExchanger.render()
           end
           if targetInfo then
             if targetInfo.sell and targetInfo.sell.allowed then
-              row[8]:createText(overrideIcons[targetInfo.sell.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[8]:createText(overrideIcons[targetInfo.sell.ruleOverride], overrideIconsOptions[targetInfo.sell.ruleOverride])
               row[9]:createText(formatTradeRuleLabel(targetInfo.sell.rule, targetInfo.sell.ruleOverride), optionsRule(targetInfo.sell.ruleOverride))
-              row[10]:createText(overrideIcons[targetInfo.sell.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[10]:createText(overrideIcons[targetInfo.sell.priceOverride], overrideIconsOptions[targetInfo.sell.priceOverride])
               row[11]:createText(formatPrice(targetInfo.sell.price, targetInfo.sell.priceOverride),
                 optionsNumber(targetInfo.sell.priceOverride))
-              row[12]:createText(overrideIcons[targetInfo.sell.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[12]:createText(overrideIcons[targetInfo.sell.limitOverride], overrideIconsOptions[targetInfo.sell.limitOverride])
               row[13]:createText(formatLimit(targetInfo.sell.limit, targetInfo.sell.limitOverride),
                 optionsNumber(targetInfo.sell.limitOverride))
             else
