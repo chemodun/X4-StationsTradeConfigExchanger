@@ -55,7 +55,7 @@ local labels = {
   limit = "Limit: %s",
   price = "Price: %s",
   rule = "Rule: %s",
-  autoLimit = "Auto",
+  auto = "Auto",
   overrideTag = "Override",
   cloneButton = "Clone",
   cancelButton = "Cancel",
@@ -455,22 +455,29 @@ local function formatTradeRuleLabel(id, hasOwn)
   return label
 end
 
+local wareTypeSortOrder = {
+  resource = 1,
+  intermediate = 2,
+  product = 3,
+}
 local function collectTradeData(entry, forceRefresh)
   if entry.tradeData and not forceRefresh then
     return entry.tradeData
   end
 
   local container = entry.id64
-  local tradeWares = GetComponentData(entry.id, "tradewares") or {}
+  local wares = entry.products or {}
   local map = {}
   local set = {}
 
-  if #tradeWares > 0 then
-    for i = 1, #tradeWares do
-      local ware = tradeWares[i]
+  if #wares > 0 then
+    for i = 1, #wares do
+      local ware = wares[i]
       set[ware] = true
       local name = GetWareData(ware, "name")
       local wareType = Helper.getContainerWareType(container, ware)
+      local storageLimit = GetWareProductionLimit(container, ware)
+      local storageLimitOverride = HasContainerStockLimitOverride(container, ware)
       local buyAllowed = C.GetContainerWareIsBuyable(container, ware)
       local buyLimit = C.GetContainerBuyLimit(container, ware)
       local buyOverride = C.HasContainerBuyLimitOverride(container, ware)
@@ -490,14 +497,17 @@ local function collectTradeData(entry, forceRefresh)
       map[ware] = {
         ware = ware,
         name = name,
+        type = wareType,
+        storageLimit = storageLimit,
+        storageLimitOverride = storageLimitOverride,
         buy = {
           allowed = (wareType == "resource") or (wareType == "intermediate") or buyAllowed or buyOverride,
           limit = buyLimit,
           limitOverride = buyOverride,
           price = buyPrice,
           priceOverride = buyPriceOverride,
-          tradeRule = buyRuleId,
-          hasOwnRule = buyOwnRule,
+          rule = buyRuleId,
+          ruleOverride = buyOwnRule,
         },
         sell = {
           allowed = (wareType == "product") or (wareType == "intermediate") or sellAllowed or sellOverride,
@@ -505,8 +515,8 @@ local function collectTradeData(entry, forceRefresh)
           limitOverride = sellOverride,
           price = sellPrice,
           priceOverride = sellPriceOverride,
-          tradeRule = sellRuleId,
-          hasOwnRule = sellOwnRule,
+          rule = sellRuleId,
+          ruleOverride = sellOwnRule,
         }
       }
     end
@@ -551,17 +561,43 @@ end
 
 local function formatLimit(value, override)
   if not override then
-    return labels.autoLimit
+    return labels.auto
   end
-  return string.format("%s (%s)", ConvertIntegerString(value, true, 3, true, true), labels.overrideTag)
+  return ConvertIntegerString(value, true, 3, false, false, false)
 end
 
 local function formatPrice(value, override)
-  local amount = ConvertMoneyString(value, true, true, 2, true)
-  if override then
-    return string.format("%s (%s)", amount, labels.overrideTag)
+  if not override then
+    return labels.auto
   end
+  local amount = ConvertMoneyString(value, true, true, 2, true)
   return amount
+end
+
+local function optionsNumber(override)
+  if override then
+    return { halign = "right" }
+  end
+  return { halign = "center", color = Color["text_inactive"] }
+end
+
+local function optionsRule(override)
+  if override then
+    return { halign = "left" }
+  end
+  return { halign = "left", color = Color["text_inactive"] }
+end
+
+local overrideIcons = {
+}
+overrideIcons[true] = "\27[widget_cross_01]\27X"
+overrideIcons[false] = "\27[bordersquare]\27X"
+
+local function optionsOverride(override)
+  if override then
+    return { halign = "center", color = Color["checkbox_background_default"] }
+  end
+  return { halign = "center", color = Color["checkbox_background_default"] }
 end
 
 local function formatSide(info)
@@ -653,6 +689,12 @@ local function resetSelections(data, wareList, diffs)
   end
   data.pendingResetSelections = false
 end
+local function sortWareList(a, b)
+  local oa = wareTypeSortOrder[a.type] or 4
+  local ob = wareTypeSortOrder[b.type] or 4
+  if oa ~= ob then return oa < ob end
+  return a.name < b.name
+end
 
 local function buildUnion(sourceData, targetData)
   local union = {}
@@ -660,20 +702,18 @@ local function buildUnion(sourceData, targetData)
   if sourceData then
     for ware, info in pairs(sourceData.map) do
       union[ware] = true
-      list[#list + 1] = { ware = ware, name = info.name }
+      list[#list + 1] = { ware = ware, name = info.name, type = info.type }
     end
   end
   if targetData then
     for ware, info in pairs(targetData.map) do
       if not union[ware] then
         union[ware] = true
-        list[#list + 1] = { ware = ware, name = info.name }
+        list[#list + 1] = { ware = ware, name = info.name, type = info.type }
       end
     end
   end
-  table.sort(list, function(a, b)
-    return a.name < b.name
-  end)
+  table.sort(list, sortWareList)
   return list
 end
 
@@ -902,22 +942,22 @@ function TradeConfigExchanger.render()
 
 
   local columns = 13
-  local ruleWidth = 140
+  local ruleWidth = 120
   local priceWidth = 120
-  local amountWidth = 100
+  local amountWidth = 120
   local tableHandle = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = true, highlightMode = "off" })
   tableHandle:setColWidth(1, Helper.standardTextHeight, false)
-  tableHandle:setColWidth(2, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(2, 30, false)
   tableHandle:setColWidth(3, ruleWidth, true)
-  tableHandle:setColWidth(4, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(4, 30, false)
   tableHandle:setColWidth(5, priceWidth, true)
-  tableHandle:setColWidth(6, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(6, 30, false)
   tableHandle:setColWidth(7, amountWidth, true)
-  tableHandle:setColWidth(8, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(8, 30, false)
   tableHandle:setColWidth(9, ruleWidth, true)
-  tableHandle:setColWidth(10, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(10, 30, false)
   tableHandle:setColWidth(11, priceWidth, true)
-  tableHandle:setColWidth(12, Helper.standardTextHeight, false)
+  tableHandle:setColWidth(12, 30, false)
   tableHandle:setColWidth(13, amountWidth, true)
 
   local row = tableHandle:addRow(false, { fixed = true })
@@ -966,25 +1006,25 @@ function TradeConfigExchanger.render()
 
   row = tableHandle:addRow(false, { fixed = true })
   row[2]:setColSpan(4):createText("Ware", Helper.headerRowCenteredProperties)
-  row[6]:createText("A", Helper.headerRowCenteredProperties)
+  row[6]:createText("Ovr", Helper.headerRowCenteredProperties)
   row[7]:createText("Storage allocation", Helper.headerRowCenteredProperties)
-  row[12]:createText("A", Helper.headerRowCenteredProperties)
+  row[12]:createText("Ovr", Helper.headerRowCenteredProperties)
   row[13]:createText("Storage allocation", Helper.headerRowCenteredProperties)
   row = tableHandle:addRow(false, { fixed = true })
   row[2]:setColSpan(12):createText("Buy Offer / Sell Offer", Helper.headerRowCenteredProperties)
   row = tableHandle:addRow(false, { fixed = true })
-  row[2]:createText("A", Helper.headerRow1Properties)
-  row[3]:createText("Rule", Helper.headerRow1Properties)
-  row[4]:createText("A", Helper.headerRow1Properties)
-  row[5]:createText("Price", Helper.headerRow1Properties)
-  row[6]:createText("A", Helper.headerRow1Properties)
-  row[7]:createText("Amount", Helper.headerRow1Properties)
-  row[8]:createText("A", Helper.headerRow1Properties)
-  row[9]:createText("Rule", Helper.headerRow1Properties)
-  row[10]:createText("A", Helper.headerRow1Properties)
-  row[11]:createText("Price", Helper.headerRow1Properties)
-  row[12]:createText("A", Helper.headerRow1Properties)
-  row[13]:createText("Amount", Helper.headerRow1Properties)
+  row[2]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[3]:createText("Rule", Helper.headerRowCenteredProperties)
+  row[4]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[5]:createText("Price", Helper.headerRowCenteredProperties)
+  row[6]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[7]:createText("Amount", Helper.headerRowCenteredProperties)
+  row[8]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[9]:createText("Rule", Helper.headerRowCenteredProperties)
+  row[10]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[11]:createText("Price", Helper.headerRowCenteredProperties)
+  row[12]:createText("Ovr", Helper.headerRowCenteredProperties)
+  row[13]:createText("Amount", Helper.headerRowCenteredProperties)
 
   tableHandle:addEmptyRow(Helper.standardTextHeight / 2)
 
@@ -993,7 +1033,7 @@ function TradeConfigExchanger.render()
   if sourceEntry == nil then
     debugTrace("No source station selected")
     row = tableHandle:addRow(false, { fixed = true })
-    row[1]:setColSpan(columns):createText("No source station selected.",
+    row[2]:setColSpan(columns - 1):createText("No source station selected.",
       { color = Color and Color["text_warning"] or nil, halign = "center" })
   else
     debugTrace("Source station: " .. tostring(sourceEntry.displayName) .. " (" .. tostring(sourceEntry.id64) .. ")")
@@ -1001,6 +1041,90 @@ function TradeConfigExchanger.render()
     local targetData = targetEntry and collectTradeData(targetEntry) or nil
     local wareList = buildUnion(sourceData, targetData)
     debugTrace("Processing " .. tostring(#wareList) .. " wares for comparison")
+    local wareType = nil
+    if #wareList == 0 then
+      row = tableHandle:addRow(false, { fixed = true })
+      row[2]:setColSpan(columns - 1):createText("No wares available for trade configuration.",
+        { color = Color and Color["text_warning"] or nil, halign = "center" })
+    else
+      for i = 1, #wareList do
+        local ware = wareList[i]
+        local sourceInfo = ware.ware and sourceData.map[ware.ware]
+        local targetInfo = ware.ware and targetData and targetData.map[ware.ware] or nil
+        if (sourceInfo or targetInfo) == nil then
+          debugTrace("Skipping ware " .. tostring(ware.ware) .. " - no data on either station")
+        else
+          if wareType ~= sourceInfo.type then
+            wareType = sourceInfo.type
+            local typeRow = tableHandle:addRow(false, { fixed = true, bgColor = Color and Color["row_background_unselectable"] or nil })
+            typeRow[2]:setColSpan(columns - 1):createText(string.upper(wareType), { font = Helper.standardFontBold, halign = "center" })
+          end
+          local row = tableHandle:addRow(true)
+          row[2]:setColSpan(4):createText(ware.name, Helper.headerRowCenteredProperties)
+          row[6]:createText(overrideIcons[sourceInfo.storageLimitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+          row[7]:createText(formatLimit(sourceInfo.storageLimit, sourceInfo.storageLimitOverride),
+            optionsNumber(sourceInfo.storageLimitOverride))          if targetInfo then
+            row[12]:createText(overrideIcons[targetInfo.storageLimitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[13]:createText(formatLimit(targetInfo.storageLimit, targetInfo.storageLimitOverride),
+              optionsNumber(targetInfo.storageLimitOverride))
+          end
+          local row = tableHandle:addRow(true)
+          if sourceInfo.buy and sourceInfo.buy.allowed then
+            row[2]:createText(overrideIcons[sourceInfo.buy.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[3]:createText(formatTradeRuleLabel(sourceInfo.buy.rule, sourceInfo.buy.ruleOverride), optionsRule(sourceInfo.buy.ruleOverride))
+            row[4]:createText(overrideIcons[sourceInfo.buy.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[5]:createText(formatPrice(sourceInfo.buy.price, sourceInfo.buy.priceOverride),
+              optionsNumber(sourceInfo.buy.priceOverride))
+            row[6]:createText(overrideIcons[sourceInfo.buy.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[7]:createText(formatLimit(sourceInfo.buy.limit, sourceInfo.buy.limitOverride),
+              optionsNumber(sourceInfo.buy.limitOverride))
+          else
+            row[5]:createText("No buy offer", { halign = "center" })
+          end
+          if targetInfo then
+            if targetInfo.buy and targetInfo.buy.allowed then
+              row[8]:createText(overrideIcons[targetInfo.buy.ruleOverride],  { halign = "center", color = Color["checkbox_background_default"] })
+              row[9]:createText(formatTradeRuleLabel(targetInfo.buy.rule, targetInfo.buy.ruleOverride), optionsRule(targetInfo.buy.ruleOverride))
+              row[10]:createText(overrideIcons[targetInfo.buy.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[11]:createText(formatPrice(targetInfo.buy.price, targetInfo.buy.priceOverride),
+                optionsNumber(targetInfo.buy.priceOverride))
+              row[12]:createText(overrideIcons[targetInfo.buy.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[13]:createText(formatLimit(targetInfo.buy.limit, targetInfo.buy.limitOverride),
+                optionsNumber(targetInfo.buy.limitOverride))
+            else
+              row[8]:setColSpan(6):createText("No buy offer", { halign = "center" })
+            end
+          end
+          local row = tableHandle:addRow(true)
+          if sourceInfo.sell and sourceInfo.sell.allowed then
+            row[2]:createText(overrideIcons[sourceInfo.sell.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[3]:createText(formatTradeRuleLabel(sourceInfo.sell.rule, sourceInfo.sell.ruleOverride), optionsRule(sourceInfo.sell.ruleOverride))
+            row[4]:createText(overrideIcons[sourceInfo.sell.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[5]:createText(formatPrice(sourceInfo.sell.price, sourceInfo.sell.priceOverride),
+              optionsNumber(sourceInfo.sell.priceOverride))
+            row[6]:createText(overrideIcons[sourceInfo.sell.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+            row[7]:createText(formatLimit(sourceInfo.sell.limit, sourceInfo.sell.limitOverride),
+              optionsNumber(sourceInfo.sell.limitOverride))
+          else
+            row[2]:setColSpan(6):createText("No sell offer", { halign = "center" })
+          end
+          if targetInfo then
+            if targetInfo.sell and targetInfo.sell.allowed then
+              row[8]:createText(overrideIcons[targetInfo.sell.ruleOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[9]:createText(formatTradeRuleLabel(targetInfo.sell.rule, targetInfo.sell.ruleOverride), optionsRule(targetInfo.sell.ruleOverride))
+              row[10]:createText(overrideIcons[targetInfo.sell.priceOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[11]:createText(formatPrice(targetInfo.sell.price, targetInfo.sell.priceOverride),
+                optionsNumber(targetInfo.sell.priceOverride))
+              row[12]:createText(overrideIcons[targetInfo.sell.limitOverride], { halign = "center", color = Color["checkbox_background_default"] })
+              row[13]:createText(formatLimit(targetInfo.sell.limit, targetInfo.sell.limitOverride),
+                optionsNumber(targetInfo.sell.limitOverride))
+            else
+              row[11]:createText("No sell offer", { halign = "center" })
+            end
+          end
+        end
+      end
+    end
   end
   -- if sourceEntry then
   --   local sourceRow = tableHandle:addRow(false, { fixed = true })
@@ -1107,7 +1231,7 @@ function TradeConfigExchanger.show()
   local data = {
     mode = "trade_config_exchanger",
     layer = menu.contextFrameLayer or 2,
-    width = Helper.scaleX(900),
+    width = Helper.scaleX(1024),
     xoffset = Helper.viewWidth / 2 - Helper.scaleX(450),
     yoffset = Helper.viewHeight / 6,
     requireMatch = true,
