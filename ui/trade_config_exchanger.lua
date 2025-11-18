@@ -250,10 +250,30 @@ local function computeProductionSignature(entry)
     return
   end
 
-  local products = GetComponentData(entry.id, "products") or {}
+  local products, rawWares = GetComponentData(entry.id, "products", "tradewares")
+  if type(products) ~= "table" then
+    products = {}
+  end
+  if type(rawWares) ~= "table" then
+    rawWares = {}
+  end
   table.sort(products)
   entry.products = products
   entry.productionSignature = table.concat(products, "|")
+  local waresSet = {}
+  local wares = {}
+  for i = 1, #products do
+    waresSet[products[i]] = true
+    wares[#wares + 1] = products[i]
+  end
+  for i = 1, #rawWares do
+    if (not waresSet[rawWares[i]]) then
+      wares[#wares + 1] = rawWares[i]
+      waresSet[rawWares[i]] = true
+    end
+  end
+  table.sort(wares)
+  entry.wares = wares
 end
 
 local function buildStationCache()
@@ -329,7 +349,7 @@ local function collectTradeData(entry, forceRefresh)
   end
 
   local container = entry.id64
-  local wares = entry.products or {}
+  local wares = entry.wares or {}
   local map = {}
   local set = {}
 
