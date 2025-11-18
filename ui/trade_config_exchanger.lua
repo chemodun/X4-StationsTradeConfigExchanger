@@ -58,6 +58,7 @@ local labels = {
   auto = "Auto",
   overrideTag = "Override",
   cloneButton = "Clone",
+  confirmClone = "Proceed with cloning",
   cancelButton = "Cancel",
   globalRule = "Global rule",
 }
@@ -778,6 +779,7 @@ function TradeConfigExchanger.render()
     updateTargetOptions(data)
     data.statusMessage = nil
     data.clone = {}
+    data.cloneConfirmed = false
     TradeConfigExchanger.render()
   end
 
@@ -791,6 +793,7 @@ function TradeConfigExchanger.render()
     data.pendingResetSelections = true
     data.statusMessage = nil
     data.clone = {}
+    data.cloneConfirmed = false
     TradeConfigExchanger.render()
   end
 
@@ -823,9 +826,9 @@ function TradeConfigExchanger.render()
   local targetEntry = data.selectedTarget and data.stations[data.selectedTarget]
   local selectedCount = 0
   if sourceEntry == nil then
-    debugTrace("No source station selected")
+    debugTrace("No stations are selected")
     row = tableMain:addRow(false, { fixed = true })
-    row[2]:setColSpan(columns - 1):createText("No source station selected.",
+    row[2]:setColSpan(columns - 1):createText("No stations are selected.",
       { color = Color and Color["text_warning"] or nil, halign = "center" })
   else
     debugTrace("Source station: " .. tostring(sourceEntry.displayName) .. " (" .. tostring(sourceEntry.id64) .. ")")
@@ -870,6 +873,7 @@ function TradeConfigExchanger.render()
               data.clone[ware.ware].sell = checked
             end
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " to " .. tostring(checked))
+            data.cloneConfirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -877,6 +881,10 @@ function TradeConfigExchanger.render()
           renderStorage(row, sourceInfo, true)
           if targetInfo then
             renderStorage(row, targetInfo, false)
+          else
+            if i == 1 then
+              row[8]:setColSpan(6):createText("Station Two not selected", { color = Color and Color["text_warning"] or nil, halign = "center" })
+            end
           end
           local row = tableMain:addRow(true, { fixed = false })
           if data.clone[ware.ware].buy then
@@ -888,6 +896,7 @@ function TradeConfigExchanger.render()
           row[1].handlers.onClick = function(_, checked)
             data.clone[ware.ware].buy = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " buy offer to " .. tostring(checked))
+            data.cloneConfirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -913,6 +922,7 @@ function TradeConfigExchanger.render()
           row[1].handlers.onClick = function(_, checked)
             data.clone[ware.ware].sell = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " sell offer to " .. tostring(checked))
+            data.cloneConfirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -936,17 +946,30 @@ function TradeConfigExchanger.render()
 
   tableMain:setSelectedCol(2)
   tableMain.properties.maxVisibleHeight = math.min(tableMain:getFullHeight(), data.height - Helper.borderSize * 2)
+
   local tableBottom = frame:addTable(columns,
     { tabOrder = 2, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = tableMain.properties.maxVisibleHeight + Helper.borderSize * 2 })
   setTableColumnsWidth(tableBottom, false)
+
   row = tableBottom:addRow(true, { fixed = true })
-  row[5]:setColSpan(2):createButton({ active = selectedCount > 0 }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
+
+  row[1]:createCheckBox(data.cloneConfirmed, { active = selectedCount > 0 })
+  row[1].handlers.onClick = function(_, checked)
+    data.cloneConfirmed = checked
+    debugTrace("Set clone confirmed to " .. tostring(checked))
+    data.statusMessage = nil
+    TradeConfigExchanger.render()
+  end
+
+  row[2]:setColSpan(2):createText(labels.confirmClone, { halign = "left" })
+
+  row[5]:setColSpan(2):createButton({ active = selectedCount > 0 and data.cloneConfirmed }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
   row[5].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, true)
     end
   end
-  row[9]:setColSpan(2):createButton({ active = selectedCount > 0 }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
+  row[9]:setColSpan(2):createButton({ active = selectedCount > 0 and data.cloneConfirmed }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
   row[9].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, false)
