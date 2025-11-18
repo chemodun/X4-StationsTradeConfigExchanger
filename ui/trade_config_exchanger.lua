@@ -680,6 +680,14 @@ local function setMainTableColumnsWidth(tableHandle)
   return width
 end
 
+local function reInitClone(data)
+  data.clone = {}
+  data.clone.wares = {}
+  data.clone.types = {}
+  data.clone.confirmed = false
+end
+
+
 function TradeConfigExchanger.render()
   local menu = TradeConfigExchanger.mapMenu
   if type(menu) ~= "table" or type(Helper) ~= "table" then
@@ -732,8 +740,7 @@ function TradeConfigExchanger.render()
     data.pendingResetSelections = true
     updateStationTwoOptions(data)
     data.statusMessage = nil
-    data.clone = {}
-    data.cloneConfirmed = false
+    reInitClone(data)
     TradeConfigExchanger.render()
   end
 
@@ -746,8 +753,7 @@ function TradeConfigExchanger.render()
     data.selectedStationTwo = tonumber(id)
     data.pendingResetSelections = true
     data.statusMessage = nil
-    data.clone = {}
-    data.cloneConfirmed = false
+    reInitClone(data)
     TradeConfigExchanger.render()
   end
 
@@ -774,7 +780,7 @@ function TradeConfigExchanger.render()
   row[12]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
   row[13]:createText(labels.rule, Helper.headerRowCenteredProperties)
 
-  tableMain:addEmptyRow(Helper.standardTextHeight / 2)
+  tableMain:addEmptyRow(Helper.standardTextHeight / 2, { fixed = true })
 
   local stationOneEntry = data.selectedStationOne and data.stations[data.selectedStationOne]
   local stationTwoEntry = data.selectedStationTwo and data.stations[data.selectedStationTwo]
@@ -800,34 +806,62 @@ function TradeConfigExchanger.render()
         local ware = wareList[i]
         local stationOneInfo = ware.ware and stationOneData.waresMap[ware.ware]
         local stationTwoInfo = ware.ware and stationTwoData and stationTwoData.waresMap[ware.ware] or nil
-        if (stationOneInfo or stationTwoInfo) == nil then
+
+        local wareInfo = stationOneInfo or stationTwoInfo
+        if wareInfo == nil then
           debugTrace("Skipping ware " .. tostring(ware.ware) .. " - no data on either station")
         else
-          if wareType ~= stationOneInfo.type then
-            wareType = stationOneInfo.type
-            local typeRow = tableMain:addRow(false, { fixed = false, bgColor = Color and Color["row_background_unselectable"] or nil })
+          if wareType ~= wareInfo.type then
+            wareType = wareInfo.type
+            local typeRow = tableMain:addRow(true, { fixed = false, bgColor = Color and Color["row_background_unselectable"] or nil })
+            if data.clone.types[wareType] == nil then
+              data.clone.types[wareType] = false
+            end
+            typeRow[1]:createCheckBox(data.clone.types[wareType], {
+              active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
+            })
+            typeRow[1].handlers.onClick = function(_, checked)
+              data.clone.types[wareType] = checked
+              debugTrace("Set clone for ware type " .. tostring(wareType) .. " to " .. tostring(checked))
+              for j = i, #wareList do
+                local w = wareList[j]
+                local info = w.ware and stationOneData.waresMap[w.ware] or stationTwoData and stationTwoData.waresMap[w.ware] or nil
+                if info == nil or info.type ~= wareType then
+                  break
+                end
+                data.clone.wares[w.ware] = { storage = checked, buy = checked, sell = checked }
+              end
+              data.clone.confirmed = false
+              data.statusMessage = nil
+              TradeConfigExchanger.render()
+            end
             typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center" })
             tableMain:addEmptyRow(Helper.standardTextHeight / 2, { fixed = false })
           end
-          if data.clone[ware.ware] == nil then
-            data.clone[ware.ware] = { storage = false, buy = false, sell = false }
+          if data.clone.wares[ware.ware] == nil then
+            data.clone.wares[ware.ware] = { storage = false, buy = false, sell = false }
           end
           local row = tableMain:addRow(true, { fixed = false })
-          if data.clone[ware.ware].storage then
+          if data.clone.wares[ware.ware].storage then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone[ware.ware].storage, {
+          row[1]:createCheckBox(data.clone.wares[ware.ware].storage, {
             active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
           })
           row[1].handlers.onClick = function(_, checked)
-            local propagate = data.clone[ware.ware].storage == data.clone[ware.ware].buy and data.clone[ware.ware].storage == data.clone[ware.ware].sell
-            data.clone[ware.ware].storage = checked
+            local propagate = data.clone.wares[ware.ware].storage == data.clone.wares[ware.ware].buy and data.clone.wares[ware.ware].storage == data.clone.wares[ware.ware].sell
+            data.clone.wares[ware.ware].storage = checked
             if propagate then
-              data.clone[ware.ware].buy = checked
-              data.clone[ware.ware].sell = checked
+              data.clone.wares[ware.ware].buy = checked
+              data.clone.wares[ware.ware].sell = checked
+            end
+            if checked == false then
+              if wareInfo and wareInfo.type then
+                data.clone.types[wareInfo.type] = false
+              end
             end
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " to " .. tostring(checked))
-            data.cloneConfirmed = false
+            data.clone.confirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -841,16 +875,21 @@ function TradeConfigExchanger.render()
             end
           end
           local row = tableMain:addRow(true, { fixed = false })
-          if data.clone[ware.ware].buy then
+          if data.clone.wares[ware.ware].buy then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone[ware.ware].buy, {
+          row[1]:createCheckBox(data.clone.wares[ware.ware].buy, {
             active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
           })
           row[1].handlers.onClick = function(_, checked)
-            data.clone[ware.ware].buy = checked
+            data.clone.wares[ware.ware].buy = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " buy offer to " .. tostring(checked))
-            data.cloneConfirmed = false
+            if checked == false then
+              if wareInfo and wareInfo.type then
+                data.clone.types[wareInfo.type] = false
+              end
+            end
+            data.clone.confirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -867,16 +906,21 @@ function TradeConfigExchanger.render()
             end
           end
           local row = tableMain:addRow(true, { fixed = false })
-          if data.clone[ware.ware].sell then
+          if data.clone.wares[ware.ware].sell then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone[ware.ware].sell, {
+          row[1]:createCheckBox(data.clone.wares[ware.ware].sell, {
             active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
           })
           row[1].handlers.onClick = function(_, checked)
-            data.clone[ware.ware].sell = checked
+            data.clone.wares[ware.ware].sell = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " sell offer to " .. tostring(checked))
-            data.cloneConfirmed = false
+            if checked == false then
+              if wareInfo and wareInfo.type then
+                data.clone.types[wareInfo.type] = false
+              end
+            end
+            data.clone.confirmed = false
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
@@ -912,11 +956,12 @@ function TradeConfigExchanger.render()
     tableConfirm:setColWidth(i, cellWidth, true)
   end
 
+  tableConfirm:addEmptyRow(Helper.standardTextHeight / 2)
   row = tableConfirm:addRow(true, { fixed = true })
 
-  row[4]:createCheckBox(data.cloneConfirmed, { active = selectedCount > 0 })
+  row[4]:createCheckBox(data.clone.confirmed, { active = selectedCount > 0 })
   row[4].handlers.onClick = function(_, checked)
-    data.cloneConfirmed = checked
+    data.clone.confirmed = checked
     debugTrace("Set clone confirmed to " .. tostring(checked))
     data.statusMessage = nil
     TradeConfigExchanger.render()
@@ -936,13 +981,13 @@ function TradeConfigExchanger.render()
 
   row = tableBottom:addRow(true, { fixed = true })
 
-  row[4]:createButton({ active = selectedCount > 0 and data.cloneConfirmed }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
+  row[4]:createButton({ active = selectedCount > 0 and data.clone.confirmed }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
   row[4].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, true)
     end
   end
-  row[6]:createButton({ active = selectedCount > 0 and data.cloneConfirmed }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
+  row[6]:createButton({ active = selectedCount > 0 and data.clone.confirmed }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
   row[6].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, false)
@@ -1005,6 +1050,8 @@ function TradeConfigExchanger.show()
 
   data.selectedStationOne = nil
   data.selectedStationTwo = nil
+
+  reInitClone(data)
 
   -- dbg.waitIDE()
   -- debugTrace("BreakPoint")
