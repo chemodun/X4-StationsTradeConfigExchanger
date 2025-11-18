@@ -829,7 +829,7 @@ function TradeConfigExchanger.render()
           renderStorage(row, stationOneInfo, true)
           if stationTwoInfo then
             renderStorage(row, stationTwoInfo, false)
-          else
+          elseif stationTwoData == nil then
             if i == 1 then
               row[8]:setColSpan(6):createText(labels.selectStationTwoPrompt, { color = Color and Color["text_warning"] or nil, halign = "center" })
             end
