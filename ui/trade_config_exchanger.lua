@@ -250,7 +250,6 @@ function TradeConfigExchanger.showTargetAlert()
   TradeConfigExchanger.alertMessage(options)
 end
 
-
 local function computeProductionSignature(entry)
   if entry.productionSignature then
     return
@@ -631,7 +630,7 @@ local function sideFromInfo(info, isbuy)
   return copy
 end
 
-local function applyClone(menu)
+local function applyClone(menu, leftToRight)
   local data = menu.contextMenuData
   if not data then
     return
@@ -750,93 +749,6 @@ function TradeConfigExchanger.render()
   })
   frame:setBackground("solid", { color = Color and Color["frame_background_semitransparent"] or nil })
 
-  -- each ware will use three rows
-  -- first - only ware related
-  -- second - purchase order
-  -- third - sell order
-  -- column 1, thin: only for check boxes, which will contain checkbox for copiyng data
-
-  -- columns 2 - 7: related to left station, except ware name, it's equal for both
-
-  -- column 2: thin
-  -- line 1: ware name started column
-  -- line 2 and 3:
-  --  respective read-only checkbox for use station settings for rule
-  -- column 3:
-  -- line 1 - continue ware name
-  -- line 2 and 3 - appropriate rule name
-  -- column 4, thin :
-  -- line 1 - continue ware name
-  -- line 2 and 3 respective read-only checkbox for automatic pricing
-  -- column 5:
-  -- line 1 - continue ware name
-  -- line 2 and 3 - appropriate price value
-
-  -- column 6 - thin: read-only checkbox
-  -- on line 1 - for automatic storage allocation for ware
-  -- on line 2 and 3 -
-  -- for automatic buy or sell amount
-  -- column 7:
-  -- line 1 - storage allocation value
-  -- line 2 and 3
-  -- for value of amount, per line, respectivelly
-
-  -- columns  8 - 13 : related to right station
-  -- column 8: thin
-  -- line 1:  empty
-  -- line 2 and 3:
-  --  respective read-only checkbox for use station settings for rule
-  -- column 9:
-  -- line 1 - empty
-  -- line 2 and 3 - appropriate rule name
-  -- column 10, thin :
-  -- line 1 - empty
-  -- line 2 and 3 respective read-only checkbox for automatic pricing
-  -- column 11:
-  -- line 1 - empty
-  -- line 2 and 3 - appropriate price value
-
-  -- column 12 - thin: read-only checkbox
-  -- on line 1 - empty
-  -- on line 2 and 3 -
-  -- for automatic buy or sell amount
-  -- column 13:
-  -- line 1 - empty
-  -- line 2 and 3
-  -- for value of amount, per line, respectivelly
-
-
-  -- header rows are multiplied too
-  -- 1 row
-  -- 1 column: empty
-  -- column 2-7: "Left station"
-  -- column 8-13: "Right station"
-  -- 2 row
-  -- 1 column - empty
-  -- column 2 - 5 - "Ware"
-  -- column 6 : "Auto"
-  -- column 7: "Storage"
-  -- column 12: "Auto"
-  -- column 13: "Storage"
-  -- 3 row:
-  -- 1 column - empty
-  -- 2-13 : "Buy / Sell Offer"
-  -- 4 row:
-  -- 1 column - empty
-  -- column 2: "Station"
-  -- column 3: "Rule"
-  -- column 4: "Auto"
-  -- column 5: "Price"
-  -- column 6: "Auto"
-  -- column 7: "Amount"
-  -- column 8: "Station"
-  -- column 9: "Rule"
-  -- column 10: "Auto"
-  -- column 11: "Price"
-  -- column 12: "Auto"
-  -- column 13: "Amount"
-
-
   local columns = 13
   local tableMain = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = true, highlightMode = "on", x = Helper.borderSize, y = Helper.borderSize, })
   setTableColumnsWidth(tableMain, true)
@@ -844,24 +756,19 @@ function TradeConfigExchanger.render()
   local row = tableMain:addRow(false, { fixed = true })
   row[1]:setColSpan(columns):createText(data.title or "Clone Station Trade Settings", Helper.headerRowCenteredProperties)
 
-  if data.statusMessage then
-    local statusRow = tableMain:addRow(false, { fixed = true })
-    statusRow[1]:setColSpan(columns):createText(data.statusMessage, { wordwrap = true, color = data.statusColor })
-  end
-
 
   row = tableMain:addRow(false, { fixed = true })
   row[2]:setColSpan(6):createText("Station One", Helper.headerRowCenteredProperties)
   row[8]:setColSpan(6):createText("Station Two", Helper.headerRowCenteredProperties)
   row = tableMain:addRow(true, { fixed = true })
   row[1]:createText("")
-  debugTrace("Rendering source dropdown with " .. tostring(#data.sourceOptions) .. " options, selected: " .. tostring(data.selectedSource))
+  debugTrace("Rendering source DropDown with " .. tostring(#data.sourceOptions) .. " options, selected: " .. tostring(data.selectedSource))
   row[2]:setColSpan(6):createDropDown(data.sourceOptions, {
     startOption = data.selectedSource or -1,
     active = #data.sourceOptions > 0,
     textOverride = (#data.sourceOptions == 0) and "No player stations" or nil,
   })
-  debugTrace("Rendered source dropdown with " .. tostring(#data.sourceOptions) .. " options, selected: " .. tostring(data.selectedSource))
+  debugTrace("Rendered source DropDown with " .. tostring(#data.sourceOptions) .. " options, selected: " .. tostring(data.selectedSource))
   row[2].handlers.onDropDownConfirmed = function(_, id)
     data.selectedSource = tonumber(id)
     if data.selectedTarget == data.selectedSource then
@@ -914,6 +821,7 @@ function TradeConfigExchanger.render()
 
   local sourceEntry = data.selectedSource and data.stations[data.selectedSource]
   local targetEntry = data.selectedTarget and data.stations[data.selectedTarget]
+  local selectedCount = 0
   if sourceEntry == nil then
     debugTrace("No source station selected")
     row = tableMain:addRow(false, { fixed = true })
@@ -948,6 +856,9 @@ function TradeConfigExchanger.render()
             data.clone[ware.ware] = { storage = false, buy = false, sell = false }
           end
           local row = tableMain:addRow(true, { fixed = false })
+          if data.clone[ware.ware].storage then
+            selectedCount = selectedCount + 1
+          end
           row[1]:createCheckBox(data.clone[ware.ware].storage, {
             active = sourceInfo ~= nil and targetInfo ~= nil,
           })
@@ -968,6 +879,9 @@ function TradeConfigExchanger.render()
             renderStorage(row, targetInfo, false)
           end
           local row = tableMain:addRow(true, { fixed = false })
+          if data.clone[ware.ware].buy then
+            selectedCount = selectedCount + 1
+          end
           row[1]:createCheckBox(data.clone[ware.ware].buy, {
             active = sourceInfo ~= nil and targetInfo ~= nil,
           })
@@ -990,6 +904,9 @@ function TradeConfigExchanger.render()
             end
           end
           local row = tableMain:addRow(true, { fixed = false })
+          if data.clone[ware.ware].sell then
+            selectedCount = selectedCount + 1
+          end
           row[1]:createCheckBox(data.clone[ware.ware].sell, {
             active = sourceInfo ~= nil and targetInfo ~= nil,
           })
@@ -1019,38 +936,35 @@ function TradeConfigExchanger.render()
 
   tableMain:setSelectedCol(2)
   tableMain.properties.maxVisibleHeight = math.min(tableMain:getFullHeight(), data.height - Helper.borderSize * 2)
-  local tableButtons = frame:addTable(columns,
+  local tableBottom = frame:addTable(columns,
     { tabOrder = 2, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = tableMain.properties.maxVisibleHeight + Helper.borderSize * 2 })
-  setTableColumnsWidth(tableButtons, false)
-  row = tableButtons:addRow(true, { fixed = true })
-  row[5]:setColSpan(2):createButton({
-    active = function()
-      return hasSelection(data) and data.selectedSource ~= nil and data.selectedTarget ~= nil
-    end
-  }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
+  setTableColumnsWidth(tableBottom, false)
+  row = tableBottom:addRow(true, { fixed = true })
+  row[5]:setColSpan(2):createButton({ active = selectedCount > 0 }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
   row[5].handlers.onClick = function()
-    if hasSelection(data) then
-      applyClone(menu)
+    if selectedCount > 0 then
+      applyClone(menu, true)
     end
   end
-  row[9]:setColSpan(2):createButton({
-    active = function()
-      return hasSelection(data) and data.selectedSource ~= nil and data.selectedTarget ~= nil
-    end
-  }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
+  row[9]:setColSpan(2):createButton({ active = selectedCount > 0 }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton, { halign = "center" })
   row[9].handlers.onClick = function()
-    if hasSelection(data) then
-      applyClone(menu)
+    if selectedCount > 0 then
+      applyClone(menu, false)
     end
   end
   row[12]:setColSpan(2):createButton({}):setText(labels.cancelButton, { halign = "center" })
   row[12].handlers.onClick = function()
     menu.closeContextMenu()
   end
-  tableButtons:setSelectedCol(12)
+
+  if data.statusMessage then
+    local statusRow = tableBottom:addRow(false, { fixed = true })
+    statusRow[1]:setColSpan(columns):createText(data.statusMessage, { wordwrap = true, color = data.statusColor })
+  end
+  tableBottom:setSelectedCol(12)
 
   frame.properties.width = tableMain.properties.width + Helper.borderSize * 2
-  frame.properties.height = tableMain.properties.maxVisibleHeight + tableButtons:getFullHeight() + Helper.borderSize * 3
+  frame.properties.height = tableMain.properties.maxVisibleHeight + tableBottom:getFullHeight() + Helper.borderSize * 3
 
   frame.properties.y = math.floor((Helper.viewHeight - frame.properties.height) / 2)
   frame.properties.x = math.floor((Helper.viewWidth - frame.properties.width) / 2)
