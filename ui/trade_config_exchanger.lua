@@ -292,7 +292,10 @@ local function buildStationCache()
       debugTrace("Found station: " .. tostring(id) .. " / " .. tostring(id64))
       entry.displayName = getStationName(entry.id64)
       local numStorages = C.GetNumCargoTransportTypes(entry.id64, true)
-      if numStorages == 0 then
+      local isshipyard, iswharf = GetComponentData(entry.id64, "isshipyard", "iswharf")
+      if isshipyard or iswharf then
+        debugTrace("Skipping station that is a shipyard or wharf: " .. tostring(entry.displayName))
+      elseif numStorages == 0 then
         debugTrace("Skipping station without cargo capacity: " .. tostring(entry.displayName))
       else
         computeProductionSignature(entry)
