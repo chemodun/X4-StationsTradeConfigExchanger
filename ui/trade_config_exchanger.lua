@@ -52,7 +52,7 @@ local labels = {
   auto = "Auto",
   overrideTag = "Override",
   cloneButton = "Clone",
-  confirmClone = "Proceed with cloning",
+  confirmClone = "Confirm before proceeding with cloning",
   cancelButton = "Cancel",
   globalRule = "Global rule",
 }
@@ -909,11 +909,11 @@ function TradeConfigExchanger.render()
   tableMain:setSelectedCol(2)
   tableMain.properties.maxVisibleHeight = math.min(tableMain:getFullHeight(), data.height - Helper.borderSize * 2)
 
-  local tableBottom = frame:addTable(columns,
+  local tableConfirm = frame:addTable(columns,
     { tabOrder = 2, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = tableMain.properties.maxVisibleHeight + Helper.borderSize * 2 })
-  setTableColumnsWidth(tableBottom, false)
+  setTableColumnsWidth(tableConfirm, false)
 
-  row = tableBottom:addRow(true, { fixed = true })
+  row = tableConfirm:addRow(true, { fixed = true })
 
   row[1]:createCheckBox(data.cloneConfirmed, { active = selectedCount > 0 })
   row[1].handlers.onClick = function(_, checked)
@@ -922,8 +922,14 @@ function TradeConfigExchanger.render()
     data.statusMessage = nil
     TradeConfigExchanger.render()
   end
+  row[2]:setColSpan(6):createText(labels.confirmClone, { halign = "left" })
 
-  row[2]:setColSpan(2):createText(labels.confirmClone, { halign = "left" })
+  local tableBottom = frame:addTable(columns,
+    { tabOrder = 3, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = tableMain.properties.maxVisibleHeight + tableConfirm:getFullHeight() + Helper.borderSize * 3 })
+  setTableColumnsWidth(tableBottom, false)
+
+
+  row = tableBottom:addRow(true, { fixed = true })
 
   row[5]:setColSpan(2):createButton({ active = selectedCount > 0 and data.cloneConfirmed }):setText(labels.cloneButton .. "  \27[widget_arrow_right_01]\27X", { halign = "center" })
   row[5].handlers.onClick = function()
@@ -949,7 +955,7 @@ function TradeConfigExchanger.render()
   tableBottom:setSelectedCol(12)
 
   frame.properties.width = tableMain.properties.width + Helper.borderSize * 2
-  frame.properties.height = tableMain.properties.maxVisibleHeight + tableBottom:getFullHeight() + Helper.borderSize * 3
+  frame.properties.height = tableMain.properties.maxVisibleHeight + tableConfirm:getFullHeight() + tableBottom:getFullHeight() + Helper.borderSize * 4
 
   frame.properties.y = math.floor((Helper.viewHeight - frame.properties.height) / 2)
   frame.properties.x = math.floor((Helper.viewWidth - frame.properties.width) / 2)
