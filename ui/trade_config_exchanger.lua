@@ -830,13 +830,14 @@ function TradeConfigExchanger.render()
             typeRow[1]:createCheckBox(data.clone.types[wareType], {
               active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
             })
+            local wType = wareType
             typeRow[1].handlers.onClick = function(_, checked)
-              data.clone.types[wareType] = checked
-              debugTrace("Set clone for ware type " .. tostring(wareType) .. " to " .. tostring(checked))
+              data.clone.types[wType] = checked
+              debugTrace("Set clone for ware type " .. tostring(wType) .. " to " .. tostring(checked))
               for j = i, #wareList do
                 local w = wareList[j]
                 local info = w.ware and stationOneData.waresMap[w.ware] or stationTwoData and stationTwoData.waresMap[w.ware] or nil
-                if info == nil or info.type ~= wareType then
+                if info == nil or info.type ~= wType then
                   break
                 end
                 data.clone.wares[w.ware] = { storage = checked, buy = checked, sell = checked }
