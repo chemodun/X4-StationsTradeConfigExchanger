@@ -681,11 +681,23 @@ local function setMainTableColumnsWidth(tableHandle)
   return width
 end
 
-local function reInitData(data)
+function TradeConfigExchanger.reInitData(cloneOnly)
+  local menu = TradeConfigExchanger.mapMenu
+  if type(menu) ~= "table" then
+    debugTrace("TradeConfigExchanger: reInitData: Invalid menu instance")
+    return
+  end
+  if menu.contextMenuData == nil then
+    menu.contextMenuData = {}
+  end
+  local data = menu.contextMenuData
   data.clone = {}
   data.clone.wares = {}
   data.clone.types = {}
   data.clone.confirmed = false
+  if cloneOnly then
+    return
+  end
   data.content = {}
 end
 
@@ -740,7 +752,7 @@ function TradeConfigExchanger.render()
     data.pendingResetSelections = true
     updateStationTwoOptions(data)
     data.statusMessage = nil
-    reInitData(data)
+    TradeConfigExchanger.reInitData()
     TradeConfigExchanger.render()
   end
 
@@ -753,7 +765,7 @@ function TradeConfigExchanger.render()
     data.selectedStationTwo = tonumber(id)
     data.pendingResetSelections = true
     data.statusMessage = nil
-    reInitData(data)
+    TradeConfigExchanger.reInitData()
     TradeConfigExchanger.render()
   end
 
@@ -1067,18 +1079,12 @@ function TradeConfigExchanger.show()
   data.selectedStationOne = nil
   data.selectedStationTwo = nil
 
-  reInitData(data)
-
-  -- dbg.waitIDE()
-  -- debugTrace("BreakPoint")
-  -- dbg.breakHere()
-  -- debugTrace("BreakPoint")
-
   updateStationTwoOptions(data)
 
   menu.contextMenuMode = data.mode
   menu.contextMenuData = data
 
+  TradeConfigExchanger.reInitData()
   TradeConfigExchanger.render()
 
   return true
