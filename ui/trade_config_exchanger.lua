@@ -803,6 +803,7 @@ function TradeConfigExchanger.render()
     if stationTwoEntry and stationTwoData == nil then
       stationTwoData = {}
     end
+    local readyToSelectWares = stationOneData ~= nil and stationTwoData ~= nil
     local wareList = buildUnion(stationOneData, stationTwoData)
     debugTrace("Processing " .. tostring(#wareList) .. " wares for comparison")
     local wareType = nil
@@ -829,9 +830,7 @@ function TradeConfigExchanger.render()
             if not activeContent then
               activeContent = true
             end
-            typeRow[1]:createCheckBox(data.clone.types[wareType], {
-              active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
-            })
+            typeRow[1]:createCheckBox(data.clone.types[wareType], { active = readyToSelectWares })
             local wType = wareType
             typeRow[1].handlers.onClick = function(_, checked)
               data.clone.types[wType] = checked
@@ -858,9 +857,7 @@ function TradeConfigExchanger.render()
           if data.clone.wares[ware.ware].storage then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone.wares[ware.ware].storage, {
-            active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
-          })
+          row[1]:createCheckBox(data.clone.wares[ware.ware].storage, { active = readyToSelectWares })
           row[1].handlers.onClick = function(_, checked)
             local propagate = data.clone.wares[ware.ware].storage == data.clone.wares[ware.ware].buy and data.clone.wares[ware.ware].storage == data.clone.wares[ware.ware].sell
             data.clone.wares[ware.ware].storage = checked
@@ -891,9 +888,7 @@ function TradeConfigExchanger.render()
           if data.clone.wares[ware.ware].buy then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone.wares[ware.ware].buy, {
-            active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
-          })
+          row[1]:createCheckBox(data.clone.wares[ware.ware].buy, { active = readyToSelectWares })
           row[1].handlers.onClick = function(_, checked)
             data.clone.wares[ware.ware].buy = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " buy offer to " .. tostring(checked))
@@ -922,9 +917,7 @@ function TradeConfigExchanger.render()
           if data.clone.wares[ware.ware].sell then
             selectedCount = selectedCount + 1
           end
-          row[1]:createCheckBox(data.clone.wares[ware.ware].sell, {
-            active = stationOneInfo ~= nil and stationTwoInfo ~= nil,
-          })
+          row[1]:createCheckBox(data.clone.wares[ware.ware].sell, { active = readyToSelectWares })
           row[1].handlers.onClick = function(_, checked)
             data.clone.wares[ware.ware].sell = checked
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " sell offer to " .. tostring(checked))
