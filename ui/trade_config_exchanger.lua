@@ -104,7 +104,8 @@ local function copyAndEnrichTable(src, extraInfo)
   return dest
 end
 
-local wareNameProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "center" })
+local wareNameProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "center", color = Color["table_row_highlight"] })
+local cargoAmountProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "right", color = Color["table_row_highlight"] })
 
 local Lib = require("extensions.sn_mod_support_apis.ui.Library")
 
@@ -259,17 +260,20 @@ function TradeConfigExchanger.showTargetAlert()
   TradeConfigExchanger.alertMessage(options)
 end
 
-local function computeProductionSignature(entry)
+local function collectWaresAndProductionSignature(entry)
   if entry.productionSignature then
     return
   end
 
-  local products, rawWares = GetComponentData(entry.id, "products", "tradewares")
+  local products, rawWares, cargoWares = GetComponentData(entry.id, "products", "tradewares", "cargo")
   if type(products) ~= "table" then
     products = {}
   end
   if type(rawWares) ~= "table" then
     rawWares = {}
+  end
+  if type(cargoWares) ~= "table" then
+    cargoWares = {}
   end
   table.sort(products)
   entry.products = products
@@ -286,9 +290,16 @@ local function computeProductionSignature(entry)
       waresSet[rawWares[i]] = true
     end
   end
+  for ware, amount in pairs(cargoWares) do
+    if (not waresSet[ware]) then
+      wares[#wares + 1] = ware
+      waresSet[ware] = true
+    end
+  end
   table.sort(wares)
   entry.tradeData = {}
   entry.tradeData.wares = wares
+  entry.tradeData.waresAmounts = cargoWares
   entry.tradeData.waresSet = waresSet
 end
 
@@ -314,7 +325,7 @@ local function buildStationCache()
       elseif numStorages == 0 then
         debugTrace("Skipping station without cargo capacity: " .. tostring(entry.displayName))
       else
-        computeProductionSignature(entry)
+        collectWaresAndProductionSignature(entry)
         stations[id64] = entry
         options[#options + 1] = { id = id64, icon = "", text = entry.displayName, displayremoveoption = false }
       end
@@ -395,6 +406,7 @@ local function collectTradeData(entry, forceRefresh)
         ware = ware,
         name = name,
         type = wareType,
+        amount = entry.tradeData.waresAmounts[ware] or 0,
         storageLimit = storageLimit,
         storageLimitOverride = storageLimitOverride,
         buy = {
@@ -665,9 +677,10 @@ local function renderStorage(row, entry, isStationOne)
   if (entry == nil) or (row == nil) then
     return
   end
-  local idx = isStationOne and 6 or 12
-  row[idx]:createText(overrideIcons[entry.storageLimitOverride], overrideIconsOptions[entry.storageLimitOverride])
-  row[idx + 1]:createText(formatLimit(entry.storageLimit, entry.storageLimitOverride), optionsNumber(entry.storageLimitOverride))
+  local idx = isStationOne and 5 or 11
+  row[idx]:createText(formatLimit(entry.amount, true), cargoAmountProperties)
+  row[idx + 1]:createText(overrideIcons[entry.storageLimitOverride], overrideIconsOptions[entry.storageLimitOverride])
+  row[idx + 2]:createText(formatLimit(entry.storageLimit, entry.storageLimitOverride), optionsNumber(entry.storageLimitOverride))
 end
 local function renderOffer(row, offerData, isBuy, isStationOne)
   local idx = isStationOne and 2 or 8
@@ -795,9 +808,11 @@ function TradeConfigExchanger.render()
 
 
   row = tableTop:addRow(false, { fixed = true })
-  row[2]:setColSpan(4):createText(labels.ware, Helper.headerRowCenteredProperties)
+  row[2]:setColSpan(3):createText(labels.ware, Helper.headerRowCenteredProperties)
+  row[5]:createText(labels.amount, Helper.headerRowCenteredProperties)
   row[6]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
   row[7]:createText(labels.storage, Helper.headerRowCenteredProperties)
+  row[11]:createText(labels.amount, Helper.headerRowCenteredProperties)
   row[12]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
   row[13]:createText(labels.storage, Helper.headerRowCenteredProperties)
   row = tableTop:addRow(false, { fixed = true })
@@ -909,7 +924,7 @@ function TradeConfigExchanger.render()
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
-          row[2]:setColSpan(4):createText(ware.name, wareNameProperties)
+          row[2]:setColSpan(3):createText(ware.name, wareNameProperties)
           if stationOneInfo then
             renderStorage(row, stationOneInfo, true)
           end
