@@ -800,6 +800,9 @@ function TradeConfigExchanger.render()
     debugTrace("Station One: " .. tostring(stationOneEntry.displayName) .. " (" .. tostring(stationOneEntry.id64) .. ")")
     local stationOneData = collectTradeData(stationOneEntry)
     local stationTwoData = stationTwoEntry and collectTradeData(stationTwoEntry) or nil
+    if stationTwoEntry and stationTwoData == nil then
+      stationTwoData = {}
+    end
     local wareList = buildUnion(stationOneData, stationTwoData)
     debugTrace("Processing " .. tostring(#wareList) .. " wares for comparison")
     local wareType = nil
