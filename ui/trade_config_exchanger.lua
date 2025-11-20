@@ -58,6 +58,8 @@ local labels = {
   selectStationOnePrompt = ReadText(1972092405, 1201),
   selectStationTwoPrompt = ReadText(1972092405, 1202),
   noWaresAvailable = ReadText(1972092405, 1203),
+  buyOffer = ReadText(1001, 8309),
+  sellOffer = ReadText(1001, 8308),
   auto = ReadText(1972092405, 1211),
   noBuyOffer = ReadText(1972092405, 1212),
   noSellOffer = ReadText(1972092405, 1213),
@@ -76,10 +78,10 @@ local overrideIcons = {
 overrideIcons[true] = "\27[menu_radio_button_on]\27X"
 overrideIcons[false] = "\27[menu_radio_button_off]\27X"
 
-local overrideIconsOptions = {
+local overrideIconsTextProperties = {
 }
-overrideIconsOptions[true] = { halign = "center" }
-overrideIconsOptions[false] = { halign = "center", color = Color["text_inactive"] }
+overrideIconsTextProperties[true] = { halign = "center" }
+overrideIconsTextProperties[false] = { halign = "center", color = Color["text_inactive"] }
 
 local dbg = nil
 
@@ -104,8 +106,10 @@ local function copyAndEnrichTable(src, extraInfo)
   return dest
 end
 
-local wareNameProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "center", color = Color["table_row_highlight"] })
-local cargoAmountProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "right", color = Color["table_row_highlight"] })
+local tableHeadersTextProperties = copyAndEnrichTable(Helper.headerRowCenteredProperties, { fontsize = Helper.standardFontSize, height = Helper.standardTextHeight })
+local wareNameTextProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "center", color = Color["table_row_highlight"] })
+local cargoAmountTextProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "right", color = Color["table_row_highlight"] })
+local textDelimiterTextProperties = { halign = "center", color = Color["text_notification_text_lowlight"], fontsize = 8, height = Helper.standardTextHeight / 2 }
 
 local Lib = require("extensions.sn_mod_support_apis.ui.Library")
 
@@ -678,8 +682,8 @@ local function renderStorage(row, entry, isStationOne)
     return
   end
   local idx = isStationOne and 5 or 11
-  row[idx]:createText(formatLimit(entry.amount, true), cargoAmountProperties)
-  row[idx + 1]:createText(overrideIcons[entry.storageLimitOverride], overrideIconsOptions[entry.storageLimitOverride])
+  row[idx]:createText(formatLimit(entry.amount, true), cargoAmountTextProperties)
+  row[idx + 1]:createText(overrideIcons[entry.storageLimitOverride], overrideIconsTextProperties[entry.storageLimitOverride])
   row[idx + 2]:createText(formatLimit(entry.storageLimit, entry.storageLimitOverride), optionsNumber(entry.storageLimitOverride))
 end
 local function renderOffer(row, offerData, isBuy, isStationOne)
@@ -688,11 +692,11 @@ local function renderOffer(row, offerData, isBuy, isStationOne)
     row[idx]:setColSpan(6):createText(isBuy and labels.noBuyOffer or labels.noSellOffer, { halign = "center" })
     return
   end
-  row[idx]:createText(overrideIcons[offerData.priceOverride], overrideIconsOptions[offerData.priceOverride])
+  row[idx]:createText(overrideIcons[offerData.priceOverride], overrideIconsTextProperties[offerData.priceOverride])
   row[idx + 1]:createText(formatPrice(offerData.price, offerData.priceOverride), optionsNumber(offerData.priceOverride))
-  row[idx + 2]:createText(overrideIcons[offerData.limitOverride], overrideIconsOptions[offerData.limitOverride])
+  row[idx + 2]:createText(overrideIcons[offerData.limitOverride], overrideIconsTextProperties[offerData.limitOverride])
   row[idx + 3]:createText(formatLimit(offerData.limit, offerData.limitOverride), optionsNumber(offerData.limitOverride))
-  row[idx + 4]:createText(overrideIcons[offerData.ruleOverride], overrideIconsOptions[offerData.ruleOverride])
+  row[idx + 4]:createText(overrideIcons[offerData.ruleOverride], overrideIconsTextProperties[offerData.ruleOverride])
   row[idx + 5]:createText(formatTradeRuleLabel(offerData.rule, offerData.ruleOverride), optionsRule(offerData.ruleOverride))
 end
 
@@ -808,28 +812,28 @@ function TradeConfigExchanger.render()
 
 
   row = tableTop:addRow(false, { fixed = true })
-  row[2]:setColSpan(3):createText(labels.ware, Helper.headerRowCenteredProperties)
-  row[5]:createText(labels.amount, Helper.headerRowCenteredProperties)
-  row[6]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[7]:createText(labels.storage, Helper.headerRowCenteredProperties)
-  row[11]:createText(labels.amount, Helper.headerRowCenteredProperties)
-  row[12]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[13]:createText(labels.storage, Helper.headerRowCenteredProperties)
+  row[2]:setColSpan(3):createText(labels.ware, tableHeadersTextProperties)
+  row[5]:createText(labels.amount, tableHeadersTextProperties)
+  row[6]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[7]:createText(labels.storage, tableHeadersTextProperties)
+  row[11]:createText(labels.amount, tableHeadersTextProperties)
+  row[12]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[13]:createText(labels.storage, tableHeadersTextProperties)
   row = tableTop:addRow(false, { fixed = true })
-  row[2]:setColSpan(12):createText(labels.buyOfferSellOffer, Helper.headerRowCenteredProperties)
+  row[2]:setColSpan(12):createText(labels.buyOfferSellOffer, tableHeadersTextProperties)
   row = tableTop:addRow(false, { fixed = true })
-  row[2]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[3]:createText(labels.price, Helper.headerRowCenteredProperties)
-  row[4]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[5]:createText(labels.amount, Helper.headerRowCenteredProperties)
-  row[6]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[7]:createText(labels.rule, Helper.headerRowCenteredProperties)
-  row[8]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[9]:createText(labels.price, Helper.headerRowCenteredProperties)
-  row[10]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[11]:createText(labels.amount, Helper.headerRowCenteredProperties)
-  row[12]:createText(labels.overrideTag, Helper.headerRowCenteredProperties)
-  row[13]:createText(labels.rule, Helper.headerRowCenteredProperties)
+  row[2]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[3]:createText(labels.price, tableHeadersTextProperties)
+  row[4]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[5]:createText(labels.amount, tableHeadersTextProperties)
+  row[6]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[7]:createText(labels.rule, tableHeadersTextProperties)
+  row[8]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[9]:createText(labels.price, tableHeadersTextProperties)
+  row[10]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[11]:createText(labels.amount, tableHeadersTextProperties)
+  row[12]:createText(labels.overrideTag, tableHeadersTextProperties)
+  row[13]:createText(labels.rule, tableHeadersTextProperties)
 
   tableTop:addEmptyRow(Helper.standardTextHeight / 2, { fixed = true })
   tableTop:setSelectedCol(2)
@@ -902,6 +906,8 @@ function TradeConfigExchanger.render()
           if data.clone.wares[ware.ware] == nil then
             data.clone.wares[ware.ware] = { storage = false, buy = false, sell = false }
           end
+          local textDelimiter = tableContent:addRow(true, { fixed = false })
+          textDelimiter[2]:setColSpan(columns - 1):createText(labels.ware, textDelimiterTextProperties)
           local row = tableContent:addRow(true, { fixed = false })
           if data.clone.wares[ware.ware].storage then
             selectedCount = selectedCount + 1
@@ -924,7 +930,7 @@ function TradeConfigExchanger.render()
             data.statusMessage = nil
             TradeConfigExchanger.render()
           end
-          row[2]:setColSpan(3):createText(ware.name, wareNameProperties)
+          row[2]:setColSpan(3):createText(ware.name, wareNameTextProperties)
           if stationOneInfo then
             renderStorage(row, stationOneInfo, true)
           end
@@ -935,6 +941,8 @@ function TradeConfigExchanger.render()
               row[8]:setColSpan(6):createText(labels.selectStationTwoPrompt, { color = Color and Color["text_warning"] or nil, halign = "center" })
             end
           end
+          textDelimiter = tableContent:addRow(true, { fixed = false })
+          textDelimiter[2]:setColSpan(columns - 1):createText(labels.buyOffer, textDelimiterTextProperties)
           local row = tableContent:addRow(true, { fixed = false })
           if data.clone.wares[ware.ware].buy then
             selectedCount = selectedCount + 1
@@ -958,6 +966,8 @@ function TradeConfigExchanger.render()
           if stationTwoInfo then
             renderOffer(row, stationTwoInfo.buy, true, false)
           end
+          textDelimiter = tableContent:addRow(true, { fixed = false })
+          textDelimiter[2]:setColSpan(columns - 1):createText(labels.sellOffer, textDelimiterTextProperties)
           local row = tableContent:addRow(true, { fixed = false })
           if data.clone.wares[ware.ware].sell then
             selectedCount = selectedCount + 1
