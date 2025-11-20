@@ -416,6 +416,7 @@ local function collectTradeData(entry, forceRefresh)
         buy = {
           allowed = (wareType == "resource") or (wareType == "intermediate") or buyAllowed or buyOverride,
           limit = buyLimit,
+          limitPercentage = storageLimit > 0 and 100.00 * buyLimit / storageLimit or 100.00,
           limitOverride = buyOverride,
           price = buyPrice,
           priceOverride = buyPriceOverride,
@@ -425,6 +426,7 @@ local function collectTradeData(entry, forceRefresh)
         sell = {
           allowed = (wareType == "product") or (wareType == "intermediate") or sellAllowed or sellOverride,
           limit = sellLimit,
+          limitPercentage = storageLimit > 0 and 100.00 * sellLimit / storageLimit or 100.00,
           limitOverride = sellOverride,
           price = sellPrice,
           priceOverride = sellPriceOverride,
@@ -443,6 +445,13 @@ local function formatLimit(value, override)
     return labels.auto
   end
   return ConvertIntegerString(value, true, 12, true)
+end
+
+local function formatLimitPercentage(value, override)
+  if not override then
+    return labels.auto
+  end
+  return string.format("%.2f%%", value)
 end
 
 local function formatPrice(value, override)
@@ -733,7 +742,7 @@ local function renderOffer(row, offerData, isBuy, isStationOne)
   row[idx]:createText(overrideIcons[offerData.priceOverride], overrideIconsTextProperties[offerData.priceOverride])
   row[idx + 1]:createText(formatPrice(offerData.price, offerData.priceOverride), optionsNumber(offerData.priceOverride))
   row[idx + 2]:createText(overrideIcons[offerData.limitOverride], overrideIconsTextProperties[offerData.limitOverride])
-  row[idx + 3]:createText(formatLimit(offerData.limit, offerData.limitOverride), optionsNumber(offerData.limitOverride))
+  row[idx + 3]:createText(formatLimitPercentage(offerData.limitPercentage, offerData.limitOverride), optionsNumber(offerData.limitOverride))
   row[idx + 4]:createText(overrideIcons[offerData.ruleOverride], overrideIconsTextProperties[offerData.ruleOverride])
   row[idx + 5]:createText(formatTradeRuleLabel(offerData.rule, offerData.ruleOverride), optionsRule(offerData.ruleOverride))
 end
