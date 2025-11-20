@@ -471,7 +471,7 @@ local function formatLimitWithPercentage(offerData)
   if not offerData.limitOverride then
     return labels.auto
   end
-  return ConvertIntegerString(offerData.limit, true, 12, true) .. " | " .. string.format("%.2f%%", offerData.limitPercentage)
+  return ConvertIntegerString(offerData.limit, true, 12, true) .. " (" .. string.format("%05.2f%%", offerData.limitPercentage) .. ")"
 end
 
 local function formatPrice(value, override)
@@ -725,7 +725,7 @@ end
 
 local function setMainTableColumnsWidth(tableHandle)
   local numberWidth = 100
-  local textWidth = 130
+  local textWidth = 150
   local overrideWidth = 54
   local width = Helper.standardTextHeight
   tableHandle:setColWidth(1, width, false)
@@ -735,6 +735,9 @@ local function setMainTableColumnsWidth(tableHandle)
       tableHandle:setColWidth(i, overrideWidth, false)
     else
       local valueWidth = numberWidth
+      if (i == 5) or (i == 11) then
+        valueWidth = valueWidth + 20
+      end
       if (i == 7) or (i == 13) then
         valueWidth = textWidth
       end
@@ -789,8 +792,10 @@ function TradeConfigExchanger.render()
   })
   frame:setBackground("solid", { color = Color and Color["frame_background_semitransparent"] or nil })
 
+  local currentY = Helper.borderSize
   local columns = 13
-  local tableTop = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = Helper.borderSize, })
+
+  local tableTop = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY, })
   setMainTableColumnsWidth(tableTop)
 
   local row = tableTop:addRow(false, { fixed = true })
@@ -859,7 +864,7 @@ function TradeConfigExchanger.render()
   tableTop:addEmptyRow(Helper.standardTextHeight / 2, { fixed = true })
   tableTop:setSelectedCol(2)
 
-  local currentY = tableTop:getFullHeight() + Helper.borderSize * 2
+  currentY = currentY + tableTop:getFullHeight() + Helper.borderSize * 2
 
   local tableContent = frame:addTable(columns, { tabOrder = 2, reserveScrollBar = true, highlightMode = "on", x = Helper.borderSize, y = currentY, })
   setMainTableColumnsWidth(tableContent)
@@ -1098,7 +1103,8 @@ function TradeConfigExchanger.render()
   end
   tableBottom:setSelectedCol(8)
 
-  frame.properties.width = tableTop.properties.width + Helper.borderSize * 2
+  tableContent.properties.reserveScrollBar = true
+  frame.properties.width = tableContent.properties.width + Helper.borderSize * 2 + Helper.scrollbarWidth
   frame.properties.height = currentY + tableBottom:getFullHeight() + Helper.borderSize
 
   frame.properties.y = math.floor((Helper.viewHeight - frame.properties.height) / 2)
@@ -1134,6 +1140,7 @@ function TradeConfigExchanger.show()
   local data = {
     mode = "trade_config_exchanger",
     layer = menu.contextFrameLayer or 2,
+    width = Helper.viewWidth - Helper.standardTextHeight * 2,
     contentHeight = math.floor(Helper.viewHeight * 0.6),
   }
 
