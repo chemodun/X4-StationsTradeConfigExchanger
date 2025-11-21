@@ -36,11 +36,6 @@ ffi.cdef [[
   void UpdateProductionTradeOffers(UniverseID containerid);
 ]]
 
-local TradeConfigExchanger = {
-  args = {},
-  playerId = 0,
-}
-
 local menu = nil
 
 local labels = {
@@ -83,10 +78,6 @@ local overrideIconsTextProperties = {
 overrideIconsTextProperties[true] = { halign = "center" }
 overrideIconsTextProperties[false] = { halign = "center", color = Color["text_inactive"] }
 
-local dbg = nil
-
-TradeConfigExchanger.labels = labels
-
 local wareTypeSortOrder = {
   resource = 1,
   intermediate = 2,
@@ -124,19 +115,6 @@ local function debugTrace(message)
   local text = "TradeConfigExchanger: " .. message
   if type(DebugError) == "function" then
     DebugError(text)
-  end
-end
-
-local function getPlayerId()
-  local current = C.GetPlayerID()
-  if current == nil or current == 0 then
-    return
-  end
-
-  local converted = ConvertStringTo64Bit(tostring(current))
-  if converted ~= 0 and converted ~= TradeConfigExchanger.playerId then
-    debugTrace("updating player_id to " .. tostring(converted))
-    TradeConfigExchanger.playerId = converted
   end
 end
 
@@ -248,7 +226,7 @@ local function buildStationCache()
 end
 
 local function ensureTradeRuleNames()
-  if TradeConfigExchanger.tradeRuleNames then
+  if tradeRuleNames then
     return
   end
   if type(Helper) ~= "table" then
@@ -263,7 +241,7 @@ local function ensureTradeRuleNames()
       mapping[option.id] = option.text
     end
   end
-  TradeConfigExchanger.tradeRuleNames = mapping
+  tradeRuleNames = mapping
 end
 
 local function getCargoCapacity(container, transport)
@@ -379,7 +357,7 @@ local function formatTradeRuleLabel(id, hasOwn, root)
   if id == 0 then
     id = -1
   end
-  local label = TradeConfigExchanger.tradeRuleNames and TradeConfigExchanger.tradeRuleNames[id]
+  local label = tradeRuleNames and tradeRuleNames[id]
   if not label or label == "" then
     label = string.format("Rule %s", tostring(id))
   end
@@ -495,6 +473,26 @@ local function buildUnion(stationOneData, stationTwoData)
   return list
 end
 
+local function reInitData(cloneOnly)
+  if type(menu) ~= "table" then
+    debugTrace("TradeConfigExchanger: reInitData: Invalid menu instance")
+    return
+  end
+  if menu.contextMenuData == nil then
+    menu.contextMenuData = {}
+  end
+  local data = menu.contextMenuData
+  data.clone = {}
+  data.clone.wares = {}
+  data.clone.types = {}
+  data.clone.wholeStation = false
+  data.clone.confirmed = false
+  if cloneOnly then
+    return
+  end
+  data.content = {}
+end
+
 local function applyClone(menu, leftToRight)
   local data = menu.contextMenuData
   if not data then
@@ -505,7 +503,6 @@ local function applyClone(menu, leftToRight)
   if not stationOneEntry or not stationTwoEntry then
     data.statusMessage = "Select Station One and Station Two first."
     data.statusColor = Color["text_warning"]
-    TradeConfigExchanger.render()
     return
   end
   local sourceEntry = leftToRight and stationOneEntry or stationTwoEntry
@@ -517,7 +514,6 @@ local function applyClone(menu, leftToRight)
   if toClone == nil or data.clone.confirmed ~= true then
     data.statusMessage = "No wares selected to clone."
     data.statusColor = Color["text_warning"]
-    TradeConfigExchanger.render()
     return
   end
 
@@ -652,7 +648,7 @@ local function applyClone(menu, leftToRight)
   end
 
   collectTradeData(targetEntry, true)
-  TradeConfigExchanger.reInitData(true)
+  reInitData(true)
   if #skipped > 0 then
     data.statusMessage = "Skipped wares: " .. table.concat(skipped, ", ")
     data.statusColor = Color["text_warning"]
@@ -660,7 +656,6 @@ local function applyClone(menu, leftToRight)
     data.statusMessage = "Clone operation completed successfully."
     data.statusColor = Color["text_success"]
   end
-  TradeConfigExchanger.render()
 end
 
 local function renderStorage(row, entry, isStationOne)
@@ -713,27 +708,7 @@ local function setMainTableColumnsWidth(tableHandle)
   return width
 end
 
-function TradeConfigExchanger.reInitData(cloneOnly)
-  if type(menu) ~= "table" then
-    debugTrace("TradeConfigExchanger: reInitData: Invalid menu instance")
-    return
-  end
-  if menu.contextMenuData == nil then
-    menu.contextMenuData = {}
-  end
-  local data = menu.contextMenuData
-  data.clone = {}
-  data.clone.wares = {}
-  data.clone.types = {}
-  data.clone.wholeStation = false
-  data.clone.confirmed = false
-  if cloneOnly then
-    return
-  end
-  data.content = {}
-end
-
-function TradeConfigExchanger.render()
+local function render()
   if type(menu) ~= "table" or type(Helper) ~= "table" then
     debugTrace("TradeConfigExchanger: Render: Invalid menu instance or Helper UI utilities are not available")
     return
@@ -786,9 +761,9 @@ function TradeConfigExchanger.render()
     end
     updateStationTwoOptions(data)
     data.statusMessage = nil
-    TradeConfigExchanger.reInitData()
+    reInitData()
     data.waresStartIndex = 1
-    TradeConfigExchanger.render()
+    render()
   end
 
   row[8]:setColSpan(6):createDropDown(data.stationTwoOptions, {
@@ -801,9 +776,9 @@ function TradeConfigExchanger.render()
   row[8].handlers.onDropDownConfirmed = function(_, id)
     data.selectedStationTwo = tonumber(id)
     data.statusMessage = nil
-    TradeConfigExchanger.reInitData()
+    reInitData()
     data.waresStartIndex = 1
-    TradeConfigExchanger.render()
+    render()
   end
 
 
@@ -900,7 +875,7 @@ function TradeConfigExchanger.render()
               end
               data.clone.confirmed = false
               data.statusMessage = nil
-              TradeConfigExchanger.render()
+              render()
             end
             typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center", color = Color["equipmentmod_quality_exceptional"] })
             tableContent:addEmptyRow(Helper.standardTextHeight / 2)
@@ -931,7 +906,7 @@ function TradeConfigExchanger.render()
             debugTrace("Set clone for ware " .. tostring(ware.ware) .. " to " .. tostring(checked))
             data.clone.confirmed = false
             data.statusMessage = nil
-            TradeConfigExchanger.render()
+            render()
           end
           row[2]:setColSpan(3):createText(ware.name, wareNameTextProperties)
           if stationOneInfo then
@@ -961,7 +936,7 @@ function TradeConfigExchanger.render()
             end
             data.clone.confirmed = false
             data.statusMessage = nil
-            TradeConfigExchanger.render()
+            render()
           end
           if stationOneInfo then
             renderOffer(row, stationOneInfo.buy, true, true)
@@ -986,7 +961,7 @@ function TradeConfigExchanger.render()
             end
             data.clone.confirmed = false
             data.statusMessage = nil
-            TradeConfigExchanger.render()
+            render()
           end
           if stationOneInfo then
             renderOffer(row, stationOneInfo.sell, false, true)
@@ -1033,7 +1008,7 @@ function TradeConfigExchanger.render()
     data.clone.confirmed = checked
     debugTrace("Set clone confirmed to " .. tostring(checked))
     data.statusMessage = nil
-    TradeConfigExchanger.render()
+    render()
   end
   row[5]:setColSpan(2):createText(labels.confirmClone, { halign = "left" })
 
@@ -1057,6 +1032,7 @@ function TradeConfigExchanger.render()
   row[4].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, true)
+      render()
     end
   end
   row[6]:createButton({ active = selectedCount > 0 and data.clone.confirmed }):setText("\27[widget_arrow_left_01]\27X  " .. labels.cloneButton,
@@ -1064,6 +1040,7 @@ function TradeConfigExchanger.render()
   row[6].handlers.onClick = function()
     if selectedCount > 0 then
       applyClone(menu, false)
+      render()
     end
   end
   row[8]:createButton({}):setText(labels.cancelButton, { halign = "center" })
@@ -1097,7 +1074,8 @@ function TradeConfigExchanger.render()
   menu.contextFrame = frame
 end
 
-function TradeConfigExchanger.show()
+local function show()
+  debugTrace("TradeConfigExchanger: Show called")
   if type(menu) ~= "table" or type(Helper) ~= "table" then
     debugTrace("TradeConfigExchanger: Show: Invalid menu instance or Helper UI utilities are not available")
     return
@@ -1133,25 +1111,19 @@ function TradeConfigExchanger.show()
   menu.contextMenuMode = data.mode
   menu.contextMenuData = data
 
-  TradeConfigExchanger.reInitData()
-  TradeConfigExchanger.render()
+  reInitData()
+  render()
 
   return true
 end
 
-function TradeConfigExchanger.ProcessRequest(_, _)
-  return TradeConfigExchanger.show()
-end
-
-function TradeConfigExchanger.Init()
-  getPlayerId()
+local function Init()
   ---@diagnostic disable-next-line: undefined-global
-  RegisterEvent("TradeConfigExchanger.Request", TradeConfigExchanger.ProcessRequest)
-  AddUITriggeredEvent("TradeConfigExchanger", "Reloaded")
+  RegisterEvent("TradeConfigExchangerShow", show)
   menu = Lib.Get_Egosoft_Menu("MapMenu")
   debugTrace("MapMenu is " .. tostring(menu))
 end
 
-Register_Require_With_Init("extensions.stations_tce.ui.trade_config_exchanger", TradeConfigExchanger, TradeConfigExchanger.Init)
+Register_Require_With_Init("extensions.stations_tce.ui.trade_config_exchanger", nil, Init)
 
-return TradeConfigExchanger
+
