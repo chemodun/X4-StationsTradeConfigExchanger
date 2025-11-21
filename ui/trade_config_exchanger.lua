@@ -492,7 +492,7 @@ local function applyClone(menu, leftToRight)
   local stationTwoEntry = data.selectedStationTwo and data.stations[data.selectedStationTwo]
   if not stationOneEntry or not stationTwoEntry then
     data.statusMessage = "Select Station One and Station Two first."
-    data.statusColor = Color and Color["text_warning"] or nil
+    data.statusColor = Color["text_warning"]
     TradeConfigExchanger.render()
     return
   end
@@ -504,7 +504,7 @@ local function applyClone(menu, leftToRight)
   local toClone = data.clone.wares
   if toClone == nil or data.clone.confirmed ~= true then
     data.statusMessage = "No wares selected to clone."
-    data.statusColor = Color and Color["text_warning"] or nil
+    data.statusColor = Color["text_warning"]
     TradeConfigExchanger.render()
     return
   end
@@ -609,10 +609,10 @@ local function applyClone(menu, leftToRight)
   TradeConfigExchanger.reInitData(true)
   if #skipped > 0 then
     data.statusMessage = "Skipped wares: " .. table.concat(skipped, ", ")
-    data.statusColor = Color and Color["text_warning"] or nil
+    data.statusColor = Color["text_warning"]
   else
     data.statusMessage = "Clone operation completed successfully."
-    data.statusColor = Color and Color["text_success"] or nil
+    data.statusColor = Color["text_success"]
   end
   TradeConfigExchanger.render()
 end
@@ -706,7 +706,7 @@ function TradeConfigExchanger.render()
     standardButtons = { close = true },
     closeOnUnhandledClick = true,
   })
-  frame:setBackground("solid", { color = Color and Color["frame_background_semitransparent"] or nil })
+  frame:setBackground("solid", { color = Color["frame_background_semitransparent"] })
 
   local currentY = Helper.borderSize
   local columns = 13
@@ -791,9 +791,9 @@ function TradeConfigExchanger.render()
   local activeContent = false
   if stationOneEntry == nil then
     debugTrace("No stations are selected")
-    row = tableContent:addRow(false, { fixed = true })
+    row = tableContent:addRow(false)
     row[2]:setColSpan(columns - 1):createText(labels.selectStationOnePrompt,
-      { color = Color and Color["text_warning"] or nil, halign = "center" })
+      { color = Color["text_warning"], halign = "center" })
   else
     debugTrace("Station One: " .. tostring(stationOneEntry.displayName) .. " (" .. tostring(stationOneEntry.id64) .. ")")
     local stationOneData = collectTradeData(stationOneEntry)
@@ -803,9 +803,9 @@ function TradeConfigExchanger.render()
     debugTrace("Processing " .. tostring(#wareList) .. " wares for comparison")
     local wareType = nil
     if #wareList == 0 then
-      row = tableContent:addRow(false, { fixed = true })
+      row = tableContent:addRow(false)
       row[2]:setColSpan(columns - 1):createText(labels.noWaresAvailable,
-        { color = Color and Color["text_warning"] or nil, halign = "center" })
+        { color = Color["text_warning"], halign = "center" })
     else
       for i = 1, #wareList do
         local ware = wareList[i]
@@ -818,7 +818,7 @@ function TradeConfigExchanger.render()
         else
           if wareType ~= wareInfo.type then
             wareType = wareInfo.type
-            local typeRow = tableContent:addRow(true, { fixed = false, bgColor = Color and Color["row_background_unselectable"] or nil })
+            local typeRow = tableContent:addRow(true, { bgColor = Color["row_background_unselectable"] })
             if data.clone.types[wareType] == nil then
               data.clone.types[wareType] = false
             end
@@ -843,14 +843,14 @@ function TradeConfigExchanger.render()
               TradeConfigExchanger.render()
             end
             typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center" })
-            tableContent:addEmptyRow(Helper.standardTextHeight / 2, { fixed = false })
+            tableContent:addEmptyRow(Helper.standardTextHeight / 2)
           end
           if data.clone.wares[ware.ware] == nil then
             data.clone.wares[ware.ware] = { storage = false, buy = false, sell = false }
           end
-          local textDelimiter = tableContent:addRow(true, { fixed = false })
+          local textDelimiter = tableContent:addRow(false, { interactive = false })
           textDelimiter[2]:setColSpan(columns - 1):createText(labels.ware, textDelimiterTextProperties)
-          local row = tableContent:addRow(true, { fixed = false })
+          local row = tableContent:addRow(true)
           if data.clone.wares[ware.ware].storage then
             selectedCount = selectedCount + 1
           end
@@ -880,12 +880,12 @@ function TradeConfigExchanger.render()
             renderStorage(row, stationTwoInfo, false)
           elseif stationTwoData == nil then
             if i == 1 then
-              row[8]:setColSpan(6):createText(labels.selectStationTwoPrompt, { color = Color and Color["text_warning"] or nil, halign = "center" })
+              row[8]:setColSpan(6):createText(labels.selectStationTwoPrompt, { color = Color["text_warning"], halign = "center" })
             end
           end
-          textDelimiter = tableContent:addRow(true, { fixed = false })
+          textDelimiter = tableContent:addRow(false, { interactive = false })
           textDelimiter[2]:setColSpan(columns - 1):createText(labels.buyOffer, textDelimiterTextProperties)
-          local row = tableContent:addRow(true, { fixed = false })
+          local row = tableContent:addRow(true)
           if data.clone.wares[ware.ware].buy then
             selectedCount = selectedCount + 1
           end
@@ -908,9 +908,9 @@ function TradeConfigExchanger.render()
           if stationTwoInfo then
             renderOffer(row, stationTwoInfo.buy, true, false)
           end
-          textDelimiter = tableContent:addRow(true, { fixed = false })
+          textDelimiter = tableContent:addRow(false, { interactive = false })
           textDelimiter[2]:setColSpan(columns - 1):createText(labels.sellOffer, textDelimiterTextProperties)
-          local row = tableContent:addRow(true, { fixed = false })
+          local row = tableContent:addRow(true, { borderBelow = true })
           if data.clone.wares[ware.ware].sell then
             selectedCount = selectedCount + 1
           end
@@ -934,7 +934,7 @@ function TradeConfigExchanger.render()
             renderOffer(row, stationTwoInfo.sell, false, false)
           end
         end
-        tableContent:addEmptyRow(Helper.standardTextHeight / 2, { fixed = false })
+        tableContent:addEmptyRow(Helper.standardTextHeight / 2)
       end
     end
   end
