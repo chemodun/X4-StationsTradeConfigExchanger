@@ -776,7 +776,6 @@ function TradeConfigExchanger.render()
     startOption = data.selectedStationOne or -1,
     active = #data.stationOneOptions > 0,
     textOverride = (#data.stationOneOptions == 0) and "No player stations" or nil,
-    color = Color["text_positive"],
   })
   row[2]:setTextProperties({ halign = "left", color = Color["text_positive"] })
   row[2]:setText2Properties({ halign = "right" })
@@ -796,7 +795,6 @@ function TradeConfigExchanger.render()
     startOption = data.selectedStationTwo or -1,
     active = #data.stationTwoOptions > 0,
     textOverride = (#data.stationTwoOptions == 0) and labels.noMatchingStations or nil,
-    color = Color["text_positive"],
   })
   row[8]:setTextProperties({ halign = "left", color = Color["text_positive"] })
   row[8]:setText2Properties({ halign = "right" })
@@ -904,7 +902,7 @@ function TradeConfigExchanger.render()
               data.statusMessage = nil
               TradeConfigExchanger.render()
             end
-            typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center", color = Color["magenta_dark"] })
+            typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center", color = Color["equipmentmod_quality_exceptional"] })
             tableContent:addEmptyRow(Helper.standardTextHeight / 2)
           end
           if data.clone.wares[ware.ware] == nil then
@@ -1002,9 +1000,6 @@ function TradeConfigExchanger.render()
     end
   end
 
-  if activeContent then
-    tableContent:setSelectedCol(1)
-  end
   tableContent.properties.maxVisibleHeight = math.min(tableContent:getFullHeight(), data.contentHeight)
   if data.content and data.content.tableContentId then
     local topRow = GetTopRow(data.content.tableContentId)
