@@ -1055,8 +1055,8 @@ function TradeConfigExchanger.render()
   end
   tableBottom:setSelectedCol(8)
 
-  frame.properties.width = tableContent.properties.width + Helper.borderSize * 2
-  if not tableContent.properties.reserveScrollBar then
+  frame.properties.width = tableTop.properties.width + Helper.borderSize * 2
+  if tableContent:hasScrollBar() and not tableContent.properties.reserveScrollBar then
     tableContent.properties.reserveScrollBar = true
     frame.properties.width = frame.properties.width + Helper.scrollbarWidth
   end
