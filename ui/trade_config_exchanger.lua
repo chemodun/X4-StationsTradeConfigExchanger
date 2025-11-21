@@ -110,7 +110,7 @@ local tableHeadersTextProperties = copyAndEnrichTable(Helper.headerRowCenteredPr
   { fontsize = Helper.standardFontSize, height = Helper.standardTextHeight })
 local wareNameTextProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "center", color = Color["table_row_highlight"] })
 local cargoAmountTextProperties = copyAndEnrichTable(Helper.subHeaderTextProperties, { halign = "right", color = Color["table_row_highlight"] })
-local textDelimiterTextProperties = { halign = "center", color = Color["text_notification_text_lowlight"], fontsize = 8, height = Helper.standardTextHeight / 2 }
+local textDelimiterTextProperties = { halign = "center", color = Color["text_notification_text_lowlight"] }
 
 local tradeRulesRoots = {
   global = ReadText(1001, 8366),
@@ -226,7 +226,8 @@ local function buildStationCache()
       debugTrace("Found station: " .. tostring(id) .. " / " .. tostring(id64))
       entry.displayName = getStationName(entry.id64)
       local numStorages = C.GetNumCargoTransportTypes(entry.id64, true)
-      local isshipyard, iswharf = GetComponentData(entry.id64, "isshipyard", "iswharf")
+      local sector, isshipyard, iswharf = GetComponentData(entry.id64, "sector", "isshipyard", "iswharf")
+      entry.sector = sector
       if isshipyard or iswharf then
         debugTrace("Skipping station that is a shipyard or wharf: " .. tostring(entry.displayName))
       elseif numStorages == 0 then
@@ -234,7 +235,7 @@ local function buildStationCache()
       else
         collectWaresAndProductionSignature(entry)
         stations[id64] = entry
-        options[#options + 1] = { id = id64, icon = "", text = entry.displayName, displayremoveoption = false }
+        options[#options + 1] = { id = id64, icon = "", text = entry.displayName, text2 = sector, displayremoveoption = false }
       end
     end
   end
@@ -441,7 +442,7 @@ local function updateStationTwoOptions(data)
       total = total + 1
       if entry.productionSignature == signature then
         matches = matches + 1
-        options[#options + 1] = { id = id, icon = "", text = entry.displayName, displayremoveoption = false }
+        options[#options + 1] = { id = id, icon = "", text = entry.displayName, text2 = entry.sector, displayremoveoption = false }
       end
     end
   end
@@ -775,7 +776,10 @@ function TradeConfigExchanger.render()
     startOption = data.selectedStationOne or -1,
     active = #data.stationOneOptions > 0,
     textOverride = (#data.stationOneOptions == 0) and "No player stations" or nil,
+    color = Color["text_positive"],
   })
+  row[2]:setTextProperties({ halign = "left", color = Color["text_positive"] })
+  row[2]:setText2Properties({ halign = "right" })
   row[2].handlers.onDropDownConfirmed = function(_, id)
     data.selectedStationOne = tonumber(id)
     if data.selectedStationTwo == data.selectedStationOne then
@@ -792,7 +796,10 @@ function TradeConfigExchanger.render()
     startOption = data.selectedStationTwo or -1,
     active = #data.stationTwoOptions > 0,
     textOverride = (#data.stationTwoOptions == 0) and labels.noMatchingStations or nil,
+    color = Color["text_positive"],
   })
+  row[8]:setTextProperties({ halign = "left", color = Color["text_positive"] })
+  row[8]:setText2Properties({ halign = "right" })
   row[8].handlers.onDropDownConfirmed = function(_, id)
     data.selectedStationTwo = tonumber(id)
     data.statusMessage = nil
@@ -897,7 +904,7 @@ function TradeConfigExchanger.render()
               data.statusMessage = nil
               TradeConfigExchanger.render()
             end
-            typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center" })
+            typeRow[2]:setColSpan(columns - 1):createText(labels[wareType], { font = Helper.standardFontBold, halign = "center", color = Color["magenta_dark"] })
             tableContent:addEmptyRow(Helper.standardTextHeight / 2)
           end
           if data.clone.wares[ware.ware] == nil then
