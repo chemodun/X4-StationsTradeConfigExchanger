@@ -329,6 +329,10 @@ local function collectTradeData(entry, forceRefresh)
         storageLimit = storageLimit,
         storageLimitPercentage = storageLimitPercentage,
         storageLimitOverride = storageLimitOverride,
+        rules = {
+          buy = buyRuleId,
+          sell = sellRuleId,
+        },
         buy = {
           allowed = (wareType == "resource") or (wareType == "intermediate") or buyAllowed or buyOverride,
           limit = buyLimit,
@@ -598,6 +602,18 @@ local function applyClone(menu, leftToRight)
                   C.SetContainerSellLimitOverride(targetEntry.id64, ware, newLimit)
                 end
               end
+              if targetWareData == nil or sourceWareData[key].rule ~= targetWareData[key].rule then
+                local sourceRuleId = sourceWareData[key].rule
+                local targetRuleId = targetWareData[key].rule
+                debugTrace("Setting " .. key .. " trade rule for ware " .. tostring(ware) .. " on target station to " .. tostring(sourceRuleId) .. " (was " .. tostring(targetWareData and targetRuleId or 0) .. ")")
+                if sourceRuleId == sourceData.rules[key] or data.clone.wholeStation and sourceRuleId == sourceData.rules[key] then
+                  debugTrace("Using station default " .. key .. " trade rule for ware " .. tostring(ware) .. " on " .. tostring(data.clone.wholeStation and "source" or "target") .. " station")
+                  C.SetContainerTradeRule(targetEntry.id64, -1, key, ware, false)
+                else
+                  debugTrace("Enforcing own " .. key .. " trade rule for ware " .. tostring(ware) .. " on target station")
+                  C.SetContainerTradeRule(targetEntry.id64, sourceRuleId, key, ware, true)
+                end
+              end
             end
           end
         end
@@ -678,6 +694,7 @@ function TradeConfigExchanger.reInitData(cloneOnly)
   data.clone = {}
   data.clone.wares = {}
   data.clone.types = {}
+  data.clone.wholeStation = false
   data.clone.confirmed = false
   if cloneOnly then
     return
