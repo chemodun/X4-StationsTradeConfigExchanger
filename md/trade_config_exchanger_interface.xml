@@ -17,16 +17,8 @@
           </conditions>
           <actions>
             <set_value name="$station" exact="event.param.$object" />
-            <debug_text
-              text="'TradeConfigExchanger: Add_Menu_Item\n Station: %s.\n event.param: %s.'.[@$station.debugname, @event.param]" chance="100" filter="scripts" />
-            <!-- event.param.$showPlayerInteractions and  -->
             <do_if
-              value="$station.owner == faction.player and $station.isclass.{class.station} and $station.storagemodules.count gt 0"> <!--  and not
-              (@$station.products.count gt 0) -->
-              <debug_text
-                text="'TradeConfigExchanger: Add_Menu_Item\n station: %s\n build: %s\n isshipyard: %s\n iswharf: %s\n isequipmentdock:%s\n issupplyship:%s\n istradestation: %s\n storagemodules: %s\n products: %s, %s\n tradewares: %s, %s'.
-                  [@$station.debugname, @$station.build, @$station.isshipyard, @$station.iswharf, @$station.isequipmentdock, @$station.issupplyship, @$station.istradestation, @$station.storagemodules.count, @$station.products.count, @$station.products.list, @$station.tradewares.count, @$station.tradewares.list]"
-                chance="100" filter="scripts" />
+              value="$station.owner == faction.player and $station.isclass.{class.station} and $station.storagemodules.count gt 0 and not @$station.isshipyard and not @$station.iswharf">
               <signal_cue_instantly
                 cue="md.Interact_Menu_API.Add_Action"
                 param="table[
@@ -34,6 +26,7 @@
                   $section    = 'main',
                   $text       = {1972092405, 1},
                   $mouseover  = {1972092405, 2},
+                  $icon       = 'menu_shoppingcart',
                   $active     = true,
                   $callback   = Show_Interface,
                 ]" />
@@ -49,11 +42,9 @@
             <set_value name="$station" exact="event.param.$object" />
             <debug_text
               text="'TradeConfigExchanger: Show\n Station: %s.\n event.param: %s.'.[@$station.debugname, @event.param]" chance="100" filter="scripts" />
-
             <do_if
-              value="$station.owner == faction.player and $station.isclass.{class.station} and $station.storagemodules.count gt 0"> <!-- and not
-              (@$station.products.count gt 0) -->
-              <raise_lua_event name="'TradeConfigExchanger.Request'" />
+              value="$station.owner == faction.player and $station.isclass.{class.station} and $station.storagemodules.count gt 0 and not @$station.isshipyard and not @$station.iswharf">
+              <raise_lua_event name="'TradeConfigExchangerShow'" />
             </do_if>
           </actions>
 
