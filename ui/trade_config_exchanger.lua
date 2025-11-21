@@ -329,10 +329,6 @@ local function collectTradeData(entry, forceRefresh)
         storageLimit = storageLimit,
         storageLimitPercentage = storageLimitPercentage,
         storageLimitOverride = storageLimitOverride,
-        rules = {
-          buy = buyRuleId,
-          sell = sellRuleId,
-        },
         buy = {
           allowed = (wareType == "resource") or (wareType == "intermediate") or buyAllowed or buyOverride,
           limit = buyLimit,
@@ -358,10 +354,16 @@ local function collectTradeData(entry, forceRefresh)
       }
     end
   end
-  entry.buyRule = stationBuyRule
-  entry.buyRuleOverride = stationBuyOwnRule
-  entry.sellRule = stationSellRule
-  entry.sellRuleOverride = stationSellOwnRule
+
+  entry.tradeData.rules = {
+    buy = stationBuyRule,
+    sell = stationSellRule,
+  }
+
+  entry.tradeData.rulesOverride = {
+    buy = stationBuyOwnRule,
+    sell = stationSellOwnRule,
+  }
   entry.tradeData.waresMap = map
   return entry.tradeData
 end
