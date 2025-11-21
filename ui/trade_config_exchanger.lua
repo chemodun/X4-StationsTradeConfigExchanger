@@ -39,8 +39,9 @@ ffi.cdef [[
 local TradeConfigExchanger = {
   args = {},
   playerId = 0,
-  mapMenu = {},
 }
+
+local menu = nil
 
 local labels = {
   title = ReadText(1972092405, 1001),
@@ -373,6 +374,20 @@ local function formatTradeRuleLabel(id, hasOwn, root)
   return label
 end
 
+local function getCargoCapacity(container, transport)
+  local numStorages = C.GetNumCargoTransportTypes(container, true)
+  local buf = ffi.new("StorageInfo[?]", numStorages)
+  local count = C.GetCargoTransportTypes(buf, numStorages, container, true, false)
+  local capacity = 0
+  for i = 0, count - 1 do
+    local tags = menu and menu.getTransportTagsFromString(ffi.string(buf[i].transport)) or {}
+    if tags[transport] == true then
+      capacity = capacity + buf[i].capacity
+    end
+  end
+  return capacity
+end
+
 local function collectTradeData(entry, forceRefresh)
   if entry.tradeData and entry.tradeData.waresMap and not forceRefresh then
     return entry.tradeData
@@ -385,13 +400,18 @@ local function collectTradeData(entry, forceRefresh)
   local stationBuyOwnRule = C.HasContainerOwnTradeRule(container, "buy", "")
   local stationSellRule = C.GetContainerTradeRuleID(container, "sell", "")
   local stationSellOwnRule = C.HasContainerOwnTradeRule(container, "sell", "")
+  local cargoCapacities = {}
 
   if #wares > 0 then
     for i = 1, #wares do
       local ware = wares[i]
-      local name = GetWareData(ware, "name")
+      local name, transport = GetWareData(ware, "name", "transport")
+      if transport and cargoCapacities[transport] == nil then
+        cargoCapacities[transport] = getCargoCapacity(container, transport)
+      end
       local wareType = Helper.getContainerWareType(container, ware)
       local storageLimit = GetWareProductionLimit(container, ware)
+      local storageLimitPercentage = cargoCapacities[transport] and cargoCapacities[transport] > 0 and 100.00 * storageLimit / cargoCapacities[transport] or 100.00
       local storageLimitOverride = HasContainerStockLimitOverride(container, ware)
       local buyAllowed = C.GetContainerWareIsBuyable(container, ware)
       local buyLimit = C.GetContainerBuyLimit(container, ware)
@@ -417,6 +437,7 @@ local function collectTradeData(entry, forceRefresh)
         type = wareType,
         amount = entry.tradeData.waresAmounts[ware] or 0,
         storageLimit = storageLimit,
+        storageLimitPercentage = storageLimitPercentage,
         storageLimitOverride = storageLimitOverride,
         buy = {
           allowed = (wareType == "resource") or (wareType == "intermediate") or buyAllowed or buyOverride,
@@ -458,11 +479,11 @@ local function formatLimit(value, override)
   return ConvertIntegerString(value, true, 12, true)
 end
 
-local function formatLimitWithPercentage(offerData)
-  if not offerData.limitOverride then
+local function formatLimitWithPercentage(limit, percentage, override)
+  if not override then
     return labels.auto
   end
-  return ConvertIntegerString(offerData.limit, true, 12, true) .. " (" .. string.format("%05.2f%%", offerData.limitPercentage) .. ")"
+  return ConvertIntegerString(limit, true, 12, true) .. " (" .. string.format("%05.2f%%", percentage) .. ")"
 end
 
 local function formatPrice(value, override)
@@ -698,7 +719,7 @@ local function renderStorage(row, entry, isStationOne)
   local idx = isStationOne and 5 or 11
   row[idx]:createText(formatLimit(entry.amount, true), cargoAmountTextProperties)
   row[idx + 1]:createText(overrideIcons[entry.storageLimitOverride], overrideIconsTextProperties[entry.storageLimitOverride])
-  row[idx + 2]:createText(formatLimit(entry.storageLimit, entry.storageLimitOverride), optionsNumber(entry.storageLimitOverride))
+  row[idx + 2]:createText(formatLimitWithPercentage(entry.storageLimit, entry.storageLimitPercentage, entry.storageLimitOverride), optionsNumber(entry.storageLimitOverride))
 end
 local function renderOffer(row, offerData, isBuy, isStationOne)
   local idx = isStationOne and 2 or 8
@@ -709,7 +730,7 @@ local function renderOffer(row, offerData, isBuy, isStationOne)
   row[idx]:createText(overrideIcons[offerData.priceOverride], overrideIconsTextProperties[offerData.priceOverride])
   row[idx + 1]:createText(formatPrice(offerData.price, offerData.priceOverride), optionsNumber(offerData.priceOverride))
   row[idx + 2]:createText(overrideIcons[offerData.limitOverride], overrideIconsTextProperties[offerData.limitOverride])
-  row[idx + 3]:createText(formatLimitWithPercentage(offerData), optionsNumber(offerData.limitOverride))
+  row[idx + 3]:createText(formatLimitWithPercentage(offerData.limit, offerData.limitPercentage, offerData.limitOverride), optionsNumber(offerData.limitOverride))
   row[idx + 4]:createText(overrideIcons[offerData.ruleOverride], overrideIconsTextProperties[offerData.ruleOverride])
   row[idx + 5]:createText(formatTradeRuleLabel(offerData.rule, offerData.ruleOverride, offerData.ruleRoot), optionsRule(offerData.ruleOverride))
 end
@@ -740,7 +761,6 @@ local function setMainTableColumnsWidth(tableHandle)
 end
 
 function TradeConfigExchanger.reInitData(cloneOnly)
-  local menu = TradeConfigExchanger.mapMenu
   if type(menu) ~= "table" then
     debugTrace("TradeConfigExchanger: reInitData: Invalid menu instance")
     return
@@ -760,7 +780,6 @@ function TradeConfigExchanger.reInitData(cloneOnly)
 end
 
 function TradeConfigExchanger.render()
-  local menu = TradeConfigExchanger.mapMenu
   if type(menu) ~= "table" or type(Helper) ~= "table" then
     debugTrace("TradeConfigExchanger: Render: Invalid menu instance or Helper UI utilities are not available")
     return
@@ -1112,7 +1131,6 @@ function TradeConfigExchanger.render()
 end
 
 function TradeConfigExchanger.show()
-  local menu = TradeConfigExchanger.mapMenu
   if type(menu) ~= "table" or type(Helper) ~= "table" then
     debugTrace("TradeConfigExchanger: Show: Invalid menu instance or Helper UI utilities are not available")
     return
@@ -1161,8 +1179,8 @@ function TradeConfigExchanger.Init()
   ---@diagnostic disable-next-line: undefined-global
   RegisterEvent("TradeConfigExchanger.Request", TradeConfigExchanger.ProcessRequest)
   AddUITriggeredEvent("TradeConfigExchanger", "Reloaded")
-  TradeConfigExchanger.mapMenu = Lib.Get_Egosoft_Menu("MapMenu")
-  debugTrace("MapMenu is " .. tostring(TradeConfigExchanger.mapMenu))
+  menu = Lib.Get_Egosoft_Menu("MapMenu")
+  debugTrace("MapMenu is " .. tostring(menu))
 end
 
 Register_Require_With_Init("extensions.stations_tce.ui.trade_config_exchanger", TradeConfigExchanger, TradeConfigExchanger.Init)
