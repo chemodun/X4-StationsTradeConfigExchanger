@@ -784,6 +784,7 @@ function TradeConfigExchanger.render()
     updateStationTwoOptions(data)
     data.statusMessage = nil
     TradeConfigExchanger.reInitData()
+    data.waresStartIndex = 1
     TradeConfigExchanger.render()
   end
 
@@ -796,6 +797,7 @@ function TradeConfigExchanger.render()
     data.selectedStationTwo = tonumber(id)
     data.statusMessage = nil
     TradeConfigExchanger.reInitData()
+    data.waresStartIndex = 1
     TradeConfigExchanger.render()
   end
 
@@ -854,7 +856,13 @@ function TradeConfigExchanger.render()
       row[2]:setColSpan(columns - 1):createText(labels.noWaresAvailable,
         { color = Color["text_warning"], halign = "center" })
     else
-      for i = 1, #wareList do
+      local wareListStartIndex = data.waresStartIndex and data.waresStartIndex or 1
+      if (wareListStartIndex > #wareList) then
+        wareListStartIndex = #wareList > data.waresOnScreenCount and (#wareList - data.waresOnScreenCount + 1) or 1
+        data.waresStartIndex = wareListStartIndex
+      end
+      local wareListEndIndex = math.floor(math.min(wareListStartIndex + data.waresOnScreenCount - 1, #wareList))
+      for i = wareListStartIndex, wareListEndIndex do
         local ware = wareList[i]
         local stationOneInfo = ware.ware and stationOneData.waresMap[ware.ware]
         local stationTwoInfo = ware.ware and stationTwoData and stationTwoData.waresMap[ware.ware] or nil
@@ -877,7 +885,7 @@ function TradeConfigExchanger.render()
             typeRow[1].handlers.onClick = function(_, checked)
               data.clone.types[wType] = checked
               debugTrace("Set clone for ware type " .. tostring(wType) .. " to " .. tostring(checked))
-              for j = i, #wareList do
+              for j = i, wareListEndIndex do
                 local w = wareList[j]
                 local info = w.ware and stationOneData.waresMap[w.ware] or stationTwoData and stationTwoData.waresMap[w.ware] or nil
                 if info == nil or info.type ~= wType then
@@ -1108,6 +1116,8 @@ function TradeConfigExchanger.show()
     layer = menu.contextFrameLayer or 2,
     width = Helper.viewWidth - Helper.standardTextHeight * 2,
     contentHeight = math.floor(Helper.viewHeight * 0.6),
+    waresStartIndex = 1,
+    waresOnScreenCount = 30
   }
 
   data.stations, data.stationOneOptions = buildStationCache()
