@@ -327,6 +327,7 @@ local function collectTradeData(entry, forceRefresh)
         ware = ware,
         name = name,
         type = wareType,
+        transport = transport,
         amount = entry.tradeData.waresAmounts[ware] or 0,
         storageLimit = storageLimit,
         storageLimitPercentage = storageLimitPercentage,
@@ -356,6 +357,8 @@ local function collectTradeData(entry, forceRefresh)
       }
     end
   end
+
+  entry.cargoCapacities = cargoCapacities
 
   entry.tradeData.rules = {
     buy = stationBuyRule,
@@ -558,11 +561,20 @@ local function applyClone(menu, leftToRight)
           elseif sourceWareData and not sourceWareData.storageLimitOverride and targetWareData and targetWareData.storageLimitOverride then
             debugTrace("Clearing storage limit override for ware " .. tostring(ware) .. " on target station")
             ClearContainerStockLimitOverride(targetEntry.id64, ware)
-          else
-            local sourceLimit = sourceWareData and sourceWareData.storageLimit or 0
-            local targetLimit = targetWareData and targetWareData.storageLimit or 0
-            debugTrace("Setting storage limit override for ware " ..
-              tostring(ware) .. " on target station to " .. tostring(sourceLimit) .. " (was " .. tostring(targetLimit) .. ")")
+          elseif sourceWareData and sourceWareData.storageLimitOverride then
+            local sourceLimit = sourceWareData.storageLimit
+            local transport = sourceWareData.transport
+            local newLimit = 0
+            if transport and targetEntry.cargoCapacities[transport] and targetEntry.cargoCapacities[transport] > 0 then
+              newLimit = math.floor(sourceWareData.storageLimitPercentage * targetEntry.cargoCapacities[transport] / 100)
+            end
+            if newLimit > 0 then
+              SetContainerStockLimitOverride(targetEntry.id64, ware, newLimit)
+              debugTrace("Setting storage limit override for ware " ..
+                tostring(ware) .. " on target station to " .. tostring(sourceLimit) .. " (was " .. tostring(newLimit) .. ")")
+            else
+              debugTrace("Skipping setting storage limit override for ware " .. tostring(ware) .. " on target station as computed limit is zero")
+            end
           end
           debugTrace("Cloning storage limit for ware " .. tostring(ware))
         end
