@@ -5,7 +5,6 @@ ffi.cdef [[
   typedef uint64_t UniverseID;
   typedef int32_t TradeRuleID;
 
-  const char* GetComponentName(UniverseID componentid);
   const char* GetObjectIDCode(UniverseID objectid);
 
 	uint32_t GetNumCargoTransportTypes(UniverseID containerid, bool merge);
@@ -22,18 +21,18 @@ ffi.cdef [[
 
   void ClearContainerBuyLimitOverride(UniverseID containerid, const char* wareid);
   void ClearContainerSellLimitOverride(UniverseID containerid, const char* wareid);
-  void ClearContainerWarePriceOverride(UniverseID containerid, const char* wareid, bool isbuy);
 
   void SetContainerBuyLimitOverride(UniverseID containerid, const char* wareid, int32_t amount);
   void SetContainerSellLimitOverride(UniverseID containerid, const char* wareid, int32_t amount);
+
   void SetContainerTradeRule(UniverseID containerid, TradeRuleID id, const char* ruletype, const char* wareid, bool value);
+
   void SetContainerWareIsBuyable(UniverseID containerid, const char* wareid, bool allowed);
   void SetContainerWareIsSellable(UniverseID containerid, const char* wareid, bool allowed);
 
   TradeRuleID GetContainerTradeRuleID(UniverseID containerid, const char* ruletype, const char* wareid);
 
   void AddTradeWare(UniverseID containerid, const char* wareid);
-  void UpdateProductionTradeOffers(UniverseID containerid);
 ]]
 
 local menu = nil
