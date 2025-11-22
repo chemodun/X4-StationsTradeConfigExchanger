@@ -265,7 +265,12 @@ local function collectTradeData(entry, forceRefresh)
   if entry.tradeData and entry.tradeData.waresMap and not forceRefresh then
     return entry.tradeData
   end
-
+  if forceRefresh then
+    entry.tradeData = nil
+  end
+  if not entry.tradeData then
+    collectWaresAndProductionSignature(entry)
+  end
   local container = entry.id64
   local wares = entry.tradeData and entry.tradeData.wares or {}
   local map = {}
