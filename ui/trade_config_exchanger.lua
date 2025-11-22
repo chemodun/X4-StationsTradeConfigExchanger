@@ -878,7 +878,7 @@ local function render()
             typeRow[1].handlers.onClick = function(_, checked)
               data.clone.types[wType] = checked
               debugTrace("Set clone for ware type " .. tostring(wType) .. " to " .. tostring(checked))
-              for j = i, wareListEndIndex do
+              for j = i, #wareList do
                 local w = wareList[j]
                 local info = w.ware and stationOneData.waresMap[w.ware] or stationTwoData and stationTwoData.waresMap[w.ware] or nil
                 if info == nil or info.type ~= wType then
