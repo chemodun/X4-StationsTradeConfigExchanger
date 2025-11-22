@@ -59,13 +59,14 @@ local labels = {
   auto = ReadText(1972092405, 1211),
   noBuyOffer = ReadText(1972092405, 1212),
   noSellOffer = ReadText(1972092405, 1213),
-  confirmClone = ReadText(1972092405, 1301),
-  cloneButton = ReadText(1972092405, 1311),
-  cancelButton = ReadText(1972092405, 1319),
   resource = ReadText(1972092405, 1121),
   intermediate = ReadText(1972092405, 1122),
   product = ReadText(1972092405, 1123),
   trade = ReadText(1972092405, 1124),
+  pageInfo = ReadText(1972092405, 1301),
+  confirmClone = ReadText(1972092405, 1401),
+  cloneButton = ReadText(1972092405, 1411),
+  cancelButton = ReadText(1972092405, 1419),
 }
 
 
@@ -488,6 +489,8 @@ local function reInitData(cloneOnly)
   data.clone.types = {}
   data.clone.wholeStation = false
   data.clone.confirmed = false
+  data.clone.waresStartIndex = 1
+  data.clone.waresCountTotal = 0
   if cloneOnly then
     return
   end
@@ -764,7 +767,6 @@ local function render()
     updateStationTwoOptions(data)
     data.statusMessage = nil
     reInitData()
-    data.waresStartIndex = 1
     render()
   end
 
@@ -779,7 +781,6 @@ local function render()
     data.selectedStationTwo = tonumber(id)
     data.statusMessage = nil
     reInitData()
-    data.waresStartIndex = 1
     render()
   end
 
@@ -838,14 +839,14 @@ local function render()
       row[2]:setColSpan(columns - 1):createText(labels.noWaresAvailable,
         { color = Color["text_warning"], halign = "center" })
     else
-      local wareListStartIndex = data.waresStartIndex and data.waresStartIndex or 1
+      local wareListStartIndex = data.clone.waresStartIndex and data.clone.waresStartIndex or 1
       if (wareListStartIndex > #wareList) then
-        wareListStartIndex = #wareList > data.waresOnScreenCount and (#wareList - data.waresOnScreenCount + 1) or 1
-        data.waresStartIndex = wareListStartIndex
+        wareListStartIndex = #wareList > data.waresOnScreenMax and (#wareList - data.waresOnScreenMax + 1) or 1
+        data.clone.waresStartIndex = wareListStartIndex
       end
-      data.waresCountTotal = #wareList
-      data.waresStartIndex = wareListStartIndex
-      local wareListEndIndex = math.floor(math.min(wareListStartIndex + data.waresOnScreenCount - 1, #wareList))
+      data.clone.waresCountTotal = #wareList
+      data.clone.waresStartIndex = wareListStartIndex
+      local wareListEndIndex = math.floor(math.min(wareListStartIndex + data.waresOnScreenMax - 1, #wareList))
       for i = wareListStartIndex, wareListEndIndex do
         local ware = wareList[i]
         local stationOneInfo = ware.ware and stationOneData.waresMap[ware.ware]
@@ -991,8 +992,68 @@ local function render()
     end
   end
 
+  frame.properties.width = tableTop.properties.width + Helper.borderSize * 2
+  if tableContent:hasScrollBar() and not tableContent.properties.reserveScrollBar then
+    tableContent.properties.reserveScrollBar = true
+    frame.properties.width = frame.properties.width + Helper.scrollbarWidth
+  end
+
   currentY = currentY + tableContent.properties.maxVisibleHeight + Helper.borderSize
   currentTableNum = currentTableNum + 1
+
+  if data.clone.waresCountTotal > data.waresOnScreenMax then
+    currentY = currentY + Helper.borderSize
+    local pageCount = math.ceil(data.clone.waresCountTotal / data.waresOnScreenMax)
+    local currentPage = math.ceil(data.clone.waresStartIndex / data.waresOnScreenMax)
+    local pageInfoFormat = tostring(labels.pageInfo or "%d / %d")
+    local pageInfoText = string.format(pageInfoFormat, currentPage, pageCount)
+    local tablePages = frame:addTable(12, { tabOrder = currentTableNum, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
+    tablePages:setColWidth(1, Helper.standardTextHeight, false)
+    local pageButtonWidth = 80
+    local pageIntervalWidth = 30
+    tablePages:setColWidthMin(2, pageButtonWidth, 2, true)
+    for i = 3, 11 do
+      if i % 2 == 0 then
+        tablePages:setColWidth(i, pageIntervalWidth, false)
+      elseif i == 7 then
+        tablePages:setColWidth(i, pageButtonWidth + pageIntervalWidth, false)
+      else
+        tablePages:setColWidth(i, pageButtonWidth, false)
+      end
+    end
+    tablePages:setColWidthMin(12, pageButtonWidth, 2, true)
+    local row = tablePages:addRow(true, { fixed = true })
+    row[3]:createButton({ active = currentPage > 1 }):setText("\27[widget_arrow_left_01]\27X\27[widget_arrow_left_01]\27X", { halign = "center" })
+    row[3].handlers.onClick = function()
+      data.clone.waresStartIndex = 1
+      render()
+    end
+
+    row[5]:createButton({ active = currentPage > 1 }):setText("\27[widget_arrow_left_01]\27X", { halign = "center" })
+    row[5].handlers.onClick = function()
+      data.clone.waresStartIndex = math.max(1, data.clone.waresStartIndex - data.waresOnScreenMax)
+      render()
+    end
+
+    row[7]:createText(pageInfoText, { halign = "center" })
+
+    row[9]:createButton({ active = currentPage < pageCount }):setText("\27[widget_arrow_right_01]\27X", { halign = "center" })
+    row[9].handlers.onClick = function()
+      if currentPage < pageCount then
+        data.clone.waresStartIndex = data.clone.waresStartIndex + data.waresOnScreenMax
+      end
+      render()
+    end
+
+    row[11]:createButton({ active = currentPage < pageCount }):setText("\27[widget_arrow_right_01]\27X\27[widget_arrow_right_01]\27X", { halign = "center" })
+    row[11].handlers.onClick = function()
+      data.clone.waresStartIndex = (pageCount - 1) * data.waresOnScreenMax + 1
+      render()
+    end
+
+    currentY = currentY + tablePages:getFullHeight() + Helper.borderSize
+    currentTableNum = currentTableNum + 1
+  end
 
   local tableConfirm = frame:addTable(9,
     { tabOrder = currentTableNum, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
@@ -1017,7 +1078,7 @@ local function render()
   end
   row[5]:setColSpan(2):createText(labels.confirmClone, { halign = "left" })
 
-  currentY = currentY + tableConfirm:getFullHeight() + Helper.borderSize
+  currentY = currentY + tableConfirm:getFullHeight() + Helper.borderSize * 2
   currentTableNum = currentTableNum + 1
 
 
@@ -1059,11 +1120,6 @@ local function render()
   end
   tableBottom:setSelectedCol(8)
 
-  frame.properties.width = tableTop.properties.width + Helper.borderSize * 2
-  if tableContent:hasScrollBar() and not tableContent.properties.reserveScrollBar then
-    tableContent.properties.reserveScrollBar = true
-    frame.properties.width = frame.properties.width + Helper.scrollbarWidth
-  end
   frame.properties.height = currentY + tableBottom:getFullHeight() + Helper.borderSize
 
   frame.properties.y = math.floor((Helper.viewHeight - frame.properties.height) / 2)
@@ -1101,8 +1157,7 @@ local function show()
     layer = menu.contextFrameLayer or 2,
     width = Helper.viewWidth - Helper.standardTextHeight * 2,
     contentHeight = math.floor(Helper.viewHeight * 0.6),
-    waresStartIndex = 1,
-    waresOnScreenCount = 30
+    waresOnScreenMax = 30,
   }
 
   data.stations, data.stationOneOptions = buildStationCache()

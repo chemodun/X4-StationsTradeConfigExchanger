@@ -25,9 +25,10 @@
       <t id="1211">Auto</t>
       <t id="1212">No Buy Offer</t>
       <t id="1213">No Sell Offer</t>
-      <t id="1301">Confirm before proceeding with cloning</t>
-      <t id="1311">Clone</t>
-      <t id="1319">Cancel</t>
+      <t id="1301">Page %d of %d</t>
+      <t id="1401">Confirm before proceeding with cloning</t>
+      <t id="1411">Clone</t>
+      <t id="1419">Cancel</t>
     </page>
   </add>
 </diff>
