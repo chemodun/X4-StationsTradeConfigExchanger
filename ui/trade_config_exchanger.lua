@@ -8,6 +8,7 @@ ffi.cdef [[
   const char* GetObjectIDCode(UniverseID objectid);
 
 	uint32_t GetNumCargoTransportTypes(UniverseID containerid, bool merge);
+  uint32_t GetCargoTransportTypes(StorageInfo* result, uint32_t resultlen, UniverseID containerid, bool merge, bool aftertradeorders);
 
   bool GetContainerWareIsBuyable(UniverseID containerid, const char* wareid);
   bool GetContainerWareIsSellable(UniverseID containerid, const char* wareid);
@@ -33,6 +34,7 @@ ffi.cdef [[
   TradeRuleID GetContainerTradeRuleID(UniverseID containerid, const char* ruletype, const char* wareid);
 
   void AddTradeWare(UniverseID containerid, const char* wareid);
+	void RemoveTradeWare(UniverseID containerid, const char* wareid);
 ]]
 
 local menu = nil
@@ -731,9 +733,10 @@ local function render()
   frame:setBackground("solid", { color = Color["frame_background_semitransparent"] })
 
   local currentY = Helper.borderSize
+  local currentTableNum = 1
   local columns = 13
 
-  local tableTop = frame:addTable(columns, { tabOrder = 1, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY, })
+  local tableTop = frame:addTable(columns, { tabOrder = currentTableNum, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY, })
   setMainTableColumnsWidth(tableTop)
 
   local row = tableTop:addRow(false, { fixed = true })
@@ -809,8 +812,9 @@ local function render()
   tableTop:setSelectedCol(2)
 
   currentY = currentY + tableTop:getFullHeight() + Helper.borderSize * 2
+  currentTableNum = currentTableNum + 1
 
-  local tableContent = frame:addTable(columns, { tabOrder = 2, reserveScrollBar = true, highlightMode = "on", x = Helper.borderSize, y = currentY, })
+  local tableContent = frame:addTable(columns, { tabOrder = currentTableNum, reserveScrollBar = true, highlightMode = "on", x = Helper.borderSize, y = currentY, })
   setMainTableColumnsWidth(tableContent)
 
   local stationOneEntry = data.selectedStationOne and data.stations[data.selectedStationOne]
@@ -987,9 +991,10 @@ local function render()
   end
 
   currentY = currentY + tableContent.properties.maxVisibleHeight + Helper.borderSize
+  currentTableNum = currentTableNum + 1
 
   local tableConfirm = frame:addTable(9,
-    { tabOrder = 3, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
+    { tabOrder = currentTableNum, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
   local cellWidth = math.floor((tableTop.properties.width - Helper.standardTextHeight) / 8) - 3
   for i = 1, 3 do
     tableConfirm:setColWidth(i, cellWidth, true)
@@ -1012,11 +1017,11 @@ local function render()
   row[5]:setColSpan(2):createText(labels.confirmClone, { halign = "left" })
 
   currentY = currentY + tableConfirm:getFullHeight() + Helper.borderSize
+  currentTableNum = currentTableNum + 1
 
 
   local tableBottom = frame:addTable(8,
-    { tabOrder = 4, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
-  -- setTableColumnsWidth(tableBottom, false)
+    { tabOrder = currentTableNum, reserveScrollBar = false, highlightMode = "off", x = Helper.borderSize, y = currentY })
 
   tableBottom:setColWidth(1, Helper.standardTextHeight, false)
   local buttonWidth = math.floor((tableTop.properties.width - Helper.standardTextHeight) / 7) - 3
