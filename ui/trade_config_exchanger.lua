@@ -540,11 +540,13 @@ local function applyClone(menu, leftToRight)
           debugTrace("Removing buy offer for ware " .. tostring(ware) .. " on target station")
           C.ClearContainerBuyLimitOverride(targetEntry.id64, ware)
           C.SetContainerWareIsBuyable(targetEntry.id64, ware, false)
+          ClearContainerWarePriceOverride(targetEntry.id64, ware, true)
         end
         if targetWareData.sell.allowed then
           debugTrace("Removing sell offer for ware " .. tostring(ware) .. " on target station")
           C.ClearContainerSellLimitOverride(targetEntry.id64, ware)
           C.SetContainerWareIsSellable(targetEntry.id64, ware, false)
+          ClearContainerWarePriceOverride(targetEntry.id64, ware, false)
         end
         if targetWareData.amount == 0 then
           C.RemoveTradeWare(targetEntry.id64, ware)
@@ -631,7 +633,7 @@ local function applyClone(menu, leftToRight)
               end
               if targetWareData == nil or sourceWareData[key].rule ~= targetWareData[key].rule then
                 local sourceRuleId = sourceWareData[key].rule
-                local targetRuleId = targetWareData[key].rule
+                local targetRuleId = targetWareData and targetWareData[key].rule or 0
                 debugTrace("Setting " ..
                   key ..
                   " trade rule for ware " ..
