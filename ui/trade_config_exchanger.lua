@@ -267,6 +267,7 @@ local function collectTradeData(entry, forceRefresh)
   end
   if forceRefresh then
     entry.tradeData = nil
+    entry.productionSignature = nil
   end
   if not entry.tradeData then
     collectWaresAndProductionSignature(entry)
