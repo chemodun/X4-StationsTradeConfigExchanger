@@ -776,16 +776,25 @@ local function render()
 
   Helper.removeAllWidgetScripts(menu, data.layer)
 
-  local frame = Helper.createFrameHandle(menu, {
-    x = data.xoffset,
-    y = data.yoffset,
-    width = data.width,
-    layer = data.layer,
-    standardButtons = { close = true },
-    closeOnUnhandledClick = false,
-  })
-  frame:setBackground("solid", { color = Color["frame_background_black"] })
-
+  local frame = data.frameHandle
+  if frame then
+    frame.properties.x = data.xoffset
+    frame.properties.y = data.yoffset
+    frame.properties.width = data.width
+    frame.properties.height = Helper.viewHeight
+    frame.content = {}
+  else
+    frame = Helper.createFrameHandle(menu, {
+      x = data.xoffset,
+      y = data.yoffset,
+      width = data.width,
+      layer = data.layer,
+      standardButtons = { close = true },
+      closeOnUnhandledClick = false,
+    })
+    frame:setBackground("solid", { color = Color["frame_background_black"] })
+    data.frameHandle = frame
+  end
   local currentY = Helper.borderSize
   local currentTableNum = 1
   local columns = 13
