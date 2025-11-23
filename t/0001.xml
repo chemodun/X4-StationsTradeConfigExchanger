@@ -33,6 +33,7 @@
       <t id="2002">No wares selected to clone!</t>
       <t id="2011">Clone operation completed successfully!\nProcessed wares: %d.</t>
       <t id="2012">Clone operation completed with warnings!\nProcessed wares: %d.\nSkipped wares: %s</t>
+      <t id="2101">Selected:\nComplete wares: %d.\nSeparately:\n - storage allocations: %d.\n - buy offers: %d.\n - sell offers: %d.</t>
     </page>
   </add>
 </diff>
