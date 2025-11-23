@@ -22,6 +22,10 @@ Stations Trade Config Exchanger allows you to exchange the trade configuration f
   - It is available via Steam - [SirNukes Mod Support APIs](https://steamcommunity.com/sharedfiles/filedetails/?id=2042901274)
   - Or via the Nexus Mods - [Mod Support APIs](https://www.nexusmods.com/x4foundations/mods/503)
 
+## Caution
+
+**Please, be aware that is first public release version of the Stations Trade Config Exchanger mod. Although it was tested in several scenarios, there may be some unforeseen issues or bugs.**
+
 ## Installation
 
 You can download the latest version via Steam client - [Stations Trade Config Exchanger](https://steamcommunity.com/sharedfiles/filedetails/?id=)
@@ -116,7 +120,7 @@ In this example will be cloned all "empty" wares except first and last wares tha
 
 ## Video
 
-[Video demonstration of the Stations Trade Config Exchanger. Version 1.00](https://www.youtube.com/watch?v=)
+[Video demonstration of the Stations Trade Config Exchanger. Version 1.00](https://www.youtube.com/watch?v=cWfU4Az8yAo)
 
 ## Credits
 
