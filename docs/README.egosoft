@@ -13,7 +13,7 @@ Stations Trade Config Exchanger allows you to exchange the trade configuration f
 [size=130][u]Limitations[/u][/size]
 [list]
 [*] Can't work with stations contained the ships factory modules, i.e. with Shipyards and Wharfs.
-[*] Identifies trading stations as stations with cargo bays and without production modules. I.e. if your defence platform has cargo modules - it's will be identified as trading station.
+[*] Identifies trading stations as stations with cargo bays and without production modules. I.e. if your defense platform has cargo modules - it's will be identified as trading station.
 [/list]
 [size=130][u]Requirements[/u][/size]
 [list]
