@@ -26,6 +26,7 @@
                   $section    = 'main',
                   $text       = {1972092405, 1},
                   $mouseover  = {1972092405, 2},
+                  $text2      = $station.knownname,
                   $icon       = 'menu_shoppingcart',
                   $active     = true,
                   $callback   = Show_Interface,
