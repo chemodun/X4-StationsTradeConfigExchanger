@@ -739,9 +739,9 @@ local function countCloneSelections(data)
 end
 
 local function setMainTableColumnsWidth(tableHandle)
-  local numberWidth = 100
-  local textWidth = 180
-  local overrideWidth = 40
+  local numberWidth = Helper.scaleX(100)
+  local textWidth = Helper.scaleX(180)
+  local overrideWidth = Helper.scaleX(40)
   local width = Helper.scaleX(Helper.standardTextHeight)
   tableHandle:setColWidth(1, width, false)
   for i = 2, 13 do
