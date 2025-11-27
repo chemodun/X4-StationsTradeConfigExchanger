@@ -131,9 +131,14 @@ In this example will be cloned all "empty" wares except first and last wares tha
 
 - [EGOSOFT](https://www.egosoft.com) — for the X series.
 - [SirNukes](https://next.nexusmods.com/profile/sirnukes?gameId=2659) — for the Mod Support APIs that power the UI hooks.
-- [Forleyor](https://next.nexusmods.com/profile/Forleyor?gameId=2659) — for his constant help with understanding the UI modding!
+- [Forleyor](https://next.nexusmods.com/profile/Forleyor?gameId=2659) — for his constant help with understanding the UI modding! And especially for the help with resolving the scaling issue!
 
 ## Changelog
+
+### [1.01] - 2025-11-27
+
+- Fixed
+  - Avoided UI scaling column widths issue in high-resolution modes by disabling scaling at all.
 
 ### [1.00] - 2025-11-23
 
